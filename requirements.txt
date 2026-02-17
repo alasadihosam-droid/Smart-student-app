@@ -1,4 +1,4 @@
 streamlit
-google-generativeai
-Pillow
 pandas
+Pillow
+google-generativeai
