@@ -7,8 +7,6 @@ from datetime import datetime
 from gtts import gTTS
 import io
 
-# --- 1. إعدادات الأمان والذكاء الاصطناعي (باستخدام مفتاحك الجديد) ---
-# الأفضل وضع المفتاح في Secrets كما شرحت لك، ولكن سأضعه هنا كاحتياط أيضاً
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 except:
