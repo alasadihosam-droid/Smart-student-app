@@ -1,100 +1,212 @@
 import streamlit as st
 import pandas as pd
 from PIL import Image
-import datetime
-import hashlib
-import google.generativeai as genai
 import os
+import google.generativeai as genai
+from datetime import datetime
+from gtts import gTTS
+import io
 
-# إعدادات المسارات
-base_path = "data"
-if not os.path.exists(base_path): os.makedirs(base_path)
-upload_path = os.path.join(base_path, 'uploads')
-if not os.path.exists(upload_path): os.makedirs(upload_path)
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+except:
+    API_KEY = "AIzaSyCn33VD-Dc241aVPEkh7HuSQRw0K1fHGB4"
 
-# إعداد الذكاء الاصطناعي (مفتاحك)
-genai.configure(api_key="AIzaSyBkrJ1cCsCQtoYGK361daqbaxdlyQWFPKw")
-model = genai.GenerativeModel("gemini-1.5-flash")
+genai.configure(api_key=API_KEY)
 
-st.set_page_config(page_title="منصة الطالب الذكي", layout="wide")
+@st.cache_resource
+def load_ai_model():
+    return genai.GenerativeModel("gemini-1.5-flash")
 
-# تصميم الواجهة
-st.markdown('''<style>
-    .stApp { background-color: white; }
-    h1 { color: #D32F2F; text-align:center; border-bottom: 2px solid #1E1E1E; padding-bottom:10px; }
-    .stButton>button { background-color:#D32F2F; color:white; border-radius:8px; font-weight:bold; }
-    [data-testid="stSidebar"] { background-color:#1E1E1E; color:white; }
-</style>''', unsafe_allow_html=True)
+def get_ai_response(prompt, image=None):
+    try:
+        model = load_ai_model()
+        if image:
+            response = model.generate_content([prompt, image])
+        else:
+            response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"⚠️ عذراً، الذكاء الاصطناعي يواجه ضغطاً. (Error: {str(e)})"
 
-st.title("🚀 منصة الطالب الذكي")
+# دالة المعلم الناطق
+def speak_text(text):
+    try:
+        # ننطق أول 250 حرف فقط لضمان السرعة وعدم التعليق
+        tts = gTTS(text=text[:250], lang='ar')
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        return fp
+    except:
+        return None
 
-CSV_DB = os.path.join(base_path, "results.csv")
-USERS_DB = os.path.join(base_path, "users.csv")
+# --- 2. نظام المجلدات وقواعد البيانات ---
+for folder in ['lessons', 'exams', 'keys', 'db']:
+    os.makedirs(folder, exist_ok=True)
 
-if os.path.exists(USERS_DB): users = pd.read_csv(USERS_DB)
-else: users = pd.DataFrame(columns=["username", "password", "role", "grade"])
+USERS_DB = "db/users.csv"
+FILES_DB = "db/files.csv"
+GRADES_DB = "db/grades.csv"
 
-if os.path.exists(CSV_DB): results = pd.read_csv(CSV_DB)
-else: results = pd.DataFrame(columns=["الاسم", "الصف", "المادة", "العلامة", "التاريخ"])
+def load_data(path, columns):
+    if os.path.exists(path):
+        return pd.read_csv(path)
+    return pd.DataFrame(columns=columns)
+
+# --- 3. إدارة الجلسة (منع تسجيل الخروج) ---
+if "user_data" not in st.session_state:
+    st.session_state["user_data"] = None
+
+# --- 4. الوقت والثيم الذكي ---
+hour = datetime.now().hour
+if 5 <= hour < 18:
+    greeting, bg, txt, card = "☀️ صباح الخير", "#F0F2F6", "#000000", "#FFFFFF"
+else:
+    greeting, bg, txt, card = "🌙 ليلة سعيدة", "#0E1117", "#FFFFFF", "#262730"
+
+st.set_page_config(page_title="منصة حسام الذكية", layout="wide")
+
+# تصميم الواجهة (CSS)
+st.markdown(f"""
+    <style>
+    .stApp {{ background-color: {bg}; color: {txt}; }}
+    .stButton>button {{ 
+        width: 100%; border-radius: 12px; height: 3.5em; 
+        background: linear-gradient(45deg, #D32F2F, #B71C1C); 
+        color: white; font-weight: bold; border: none;
+    }}
+    .greeting-box {{ 
+        padding: 20px; background-color: {card}; border-radius: 15px; 
+        border: 1px solid #D32F2F; text-align: center; margin-bottom: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }}
+    .plan-box {{ 
+        background-color: #fdf2f2; border-right: 5px solid #D32F2F; 
+        padding: 15px; border-radius: 8px; color: black; margin-top: 10px;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
 
 subs_map = {
-    "التاسع": ["فيزياء", "كيمياء", "علوم", "رياضيات", "عربي"],
-    "البكالوريا العلمي": ["فيزياء", "كيمياء", "علوم", "رياضيات", "عربي"],
-    "البكالوريا الأدبي": ["فلسفة", "تاريخ", "جغرافيا", "عربي"]
+    "التاسع": ["فيزياء", "كيمياء", "علوم", "رياضيات", "فرنسي", "إنكليزي", "عربي"],
+    "البكالوريا العلمي": ["فيزياء", "كيمياء", "علوم", "رياضيات", "فرنسي", "عربي"],
+    "البكالوريا الأدبي": ["فلسفة", "تاريخ", "جغرافيا", "فرنسي", "عربي"]
 }
 
-def hash_password(password): return hashlib.sha256(password.encode()).hexdigest()
-
-with st.sidebar:
-    st.header("🔐 الدخول")
-    if "logged_in" not in st.session_state:
-        auth_mode = st.radio("اختر:", ["تسجيل دخول", "إنشاء حساب"])
-        u_in = st.text_input("اسم المستخدم")
-        p_in = st.text_input("كلمة المرور", type="password")
-
-        if auth_mode == "إنشاء حساب":
-            role_in = st.selectbox("النوع:", ["🎓 طالب", "👨‍🏫 أستاذ"])
-            grade_in = st.selectbox("الصف:", list(subs_map.keys())) if role_in == "🎓 طالب" else "None"
-            if st.button("تأكيد التسجيل"):
-                if u_in and p_in:
-                    new_u = pd.DataFrame([{"username": u_in, "password": hash_password(p_in), "role": role_in, "grade": grade_in}])
-                    users = pd.concat([users, new_u], ignore_index=True)
-                    users.to_csv(USERS_DB, index=False)
-                    st.success("✅ تم الإنشاء")
-        else:
-            if st.button("دخول"):
-                match = users[(users["username"].astype(str) == u_in) & (users["password"].astype(str) == hash_password(p_in))]
+# --- 5. منطق الدخول ---
+if st.session_state["user_data"] is None:
+    st.markdown(f'<div class="greeting-box"><h1>{greeting}</h1><p>أهلاً بك في منصة حسام التعليمية</p></div>', unsafe_allow_html=True)
+    t_log, t_sign = st.tabs(["🔐 تسجيل الدخول", "📝 إنشاء حساب"])
+    
+    with t_log:
+        u = st.text_input("اسم المستخدم", key="login_u")
+        p = st.text_input("كلمة المرور", type="password", key="login_p")
+        if st.button("دخول المنصة"):
+            if u == "Hosam" and p == "Anahosam031007":
+                st.session_state["user_data"] = {"user": u, "role": "Owner", "grade": "الكل"}
+                st.rerun()
+            else:
+                users = load_data(USERS_DB, ["user", "pass", "role", "grade"])
+                match = users[(users["user"] == u) & (users["pass"] == p)]
                 if not match.empty:
-                    st.session_state["logged_in"] = True
-                    st.session_state["user"] = u_in
-                    st.session_state["role"] = match.iloc[0]["role"]
+                    st.session_state["user_data"] = match.iloc[0].to_dict()
                     st.rerun()
-                else: st.error("خطأ في البيانات")
-    else:
-        st.write(f"مرحباً: {st.session_state['user']}")
-        if st.button("خروج"):
-            del st.session_state["logged_in"]
-            st.rerun()
+                else: st.error("عذراً، البيانات غير صحيحة")
+    
+    with t_sign:
+        nu = st.text_input("الاسم الكامل")
+        np = st.text_input("كلمة السر", type="password")
+        nr = st.selectbox("أنا:", ["طالب", "أستاذ"])
+        ng = st.selectbox("الصف:", list(subs_map.keys())) if nr == "طالب" else "الكل"
+        if st.button("تأكيد إنشاء الحساب"):
+            users = load_data(USERS_DB, ["user", "pass", "role", "grade"])
+            if nu in users['user'].values: st.error("الاسم موجود مسبقاً")
+            else:
+                pd.concat([users, pd.DataFrame([{"user": nu, "pass": np, "role": nr, "grade": ng}])]).to_csv(USERS_DB, index=False)
+                st.success("تم بنجاح! سجل دخولك الآن")
 
-if "logged_in" in st.session_state:
-    role = st.session_state["role"]
-    username = st.session_state["user"]
+else:
+    user = st.session_state["user_data"]
+    st.sidebar.markdown(f"### 👋 أهلاً {user['user']}\n**{greeting}**")
+    if st.sidebar.button("🔴 تسجيل الخروج"):
+        st.session_state["user_data"] = None
+        st.rerun()
 
-    if role == "👨‍🏫 أستاذ":
-        st.subheader(f"لوحة التحكم: {username}")
-        up = st.file_uploader("ارفع ملف المادة", type=["pdf", "jpg", "png"])
-        if up and st.button("نشر"):
-            with open(os.path.join(upload_path, up.name), "wb") as f:
-                f.write(up.getbuffer())
-            st.success("تم النشر بنجاح!")
-    else:
-        st.subheader(f"بوابة الطالب: {username}")
-        # تبويبات الطالب
-        t1, t2 = st.tabs(["📚 الملفات", "📸 التصحيح"])
-        with t1:
-            st.write("الملفات المرفوعة ستظهر هنا")
-        with t2:
-            img = st.file_uploader("ارفع الحل")
-            if img and st.button("تصحيح"):
-                res = model.generate_content(["صحح العلامة من 10:", Image.open(img)])
-                st.write(res.text)
+    # --- واجهة المالك (حسام) ---
+    if user["role"] == "Owner":
+        st.header("👑 لوحة التحكم العليا")
+        t_users, t_files = st.tabs(["👥 الأعضاء", "📁 الملفات"])
+        with t_users: st.dataframe(load_data(USERS_DB, ["user", "pass", "role", "grade"]), use_container_width=True)
+        with t_files: st.dataframe(load_data(FILES_DB, ["name", "grade", "sub", "type", "date"]), use_container_width=True)
+
+    # --- واجهة الأستاذ ---
+    elif user["role"] == "أستاذ":
+        st.header("👨‍🏫 مركز رفع الدروس")
+        col1, col2 = st.columns(2)
+        with col1: tg = st.selectbox("استهداف الصف:", list(subs_map.keys()))
+        with col2: ts = st.selectbox("المادة:", subs_map[tg])
+        
+        type_f = st.radio("نوع الملف المرفوع:", ["بحث", "نموذج امتحاني"])
+        up = st.file_uploader("اختر الملف (PDF)", type=['pdf'], key="teacher_upload")
+        
+        if up and st.button("🚀 تأكيد الحفظ على السيرفر"):
+            with st.spinner("جاري المعالجة..."):
+                folder = "lessons" if type_f == "بحث" else "exams"
+                f_name = f"{type_f}_{ts}_{up.name.replace(' ','_')}"
+                with open(os.path.join(folder, f_name), "wb") as f:
+                    f.write(up.getbuffer())
+                
+                f_db = load_data(FILES_DB, ["name", "grade", "sub", "type", "date"])
+                pd.concat([f_db, pd.DataFrame([{"name": f_name, "grade": tg, "sub": ts, "type": type_f, "date": datetime.now().strftime("%Y-%m-%d")}])]).to_csv(FILES_DB, index=False)
+                st.success(f"✅ تم رفع {f_name} بنجاح!")
+
+    # --- واجهة الطالب (الخدمات الذكية) ---
+    elif user["role"] == "طالب":
+        st.markdown(f'<div class="greeting-box"><h3>{greeting} يا بطل</h3><p>صفتك: {user["grade"]}</p></div>', unsafe_allow_html=True)
+        sub = st.selectbox("اختر المادة للدراسة:", subs_map[user['grade']])
+        
+        t_study, t_ai, t_plan = st.tabs(["📚 المكتبة", "🤖 المعلم الذكي", "📅 المنقذ (جدول)"])
+        
+        with t_study:
+            f_db = load_data(FILES_DB, ["name", "grade", "sub", "type", "date"])
+            my_f = f_db[(f_db["grade"] == user["grade"]) & (f_db["sub"] == sub)]
+            if my_f.empty: st.info("لا توجد ملفات مرفوعة حالياً لهذه المادة.")
+            for _, r in my_f.iterrows():
+                folder = "lessons" if r['type'] == "بحث" else "exams"
+                path = os.path.join(folder, r['name'])
+                if os.path.exists(path):
+                    with open(path, "rb") as f:
+                        st.download_button(f"📥 تحميل {r['type']}: {r['name'].split('_')[-1]}", f, file_name=r['name'])
+
+        with t_ai:
+            st.subheader("💬 المعلم الذكي (صوت وكتابة)")
+            q = st.chat_input("اسألني أي سؤال في المنهاج...")
+            if q:
+                with st.spinner("جاري التفكير..."):
+                    ans = get_ai_response(f"أنت معلم سوري خبير، أجب بدقة واختصار عن {sub} لصف {user['grade']}: {q}")
+                    st.chat_message("assistant").write(ans)
+                    # ميزة الصوت
+                    audio_data = speak_text(ans)
+                    if audio_data:
+                        st.audio(audio_data, format='audio/mp3')
+                        st.caption("🔊 اضغط لتسمع شرح المعلم")
+            
+            st.divider()
+            st.subheader("📸 مصحح الأوراق الآلي")
+            img = st.file_uploader("ارفع صورة حلك (واضحة)", type=["jpg", "png", "jpeg"])
+            if img and st.button("بدء التصحيح الذكي"):
+                with st.spinner("جاري تحليل الحل..."):
+                    res = get_ai_response(f"صحح ورقة الطالب في {sub} لصف {user['grade']} واعط علامة من 100 مع ملاحظات.", Image.open(img))
+                    st.success("اكتمل التحليل!")
+                    st.write(res)
+
+        with t_plan:
+            st.subheader("🗓️ صانع الجداول الذكي")
+            days = st.number_input("كم يوم باقي للفحص؟", 1, 100, 7)
+            hours = st.slider("ساعات الدراسة اليومية:", 1, 15, 6)
+            if st.button("🚀 صمم لي خطة الإنقاذ"):
+                with st.spinner("جاري التصميم..."):
+                    plan_prompt = f"صمم جدول دراسي مكثف لمادة {sub} لصف {user['grade']} لمدة {days} أيام، بمعدل {hours} ساعات يومياً. وزع المنهاج بشكل منطقي."
+                    plan_res = get_ai_response(plan_prompt)
+                    st.markdown(f'<div class="plan-box">{plan_res}</div>', unsafe_allow_html=True)
+                    st.balloons()
