@@ -5,50 +5,46 @@ import os
 import google.generativeai as genai
 
 # --- 1. إعدادات الذكاء الاصطناعي ---
-# استبدل بمفتاحك إذا تغير
 genai.configure(api_key="AIzaSyBkrJ1cCsCQtoYGK361daqbaxdlyQWFPKw")
 model = genai.GenerativeModel("gemini-1.5-flash")
 
-# --- 2. إنشاء نظام المجلدات وقواعد البيانات ---
-# ملاحظة: المجلدات ستنشأ تلقائياً عند التشغيل الأول على السيرفر
+# --- 2. نظام المجلدات ---
 for folder in ['lessons', 'exams', 'keys', 'db']:
     os.makedirs(folder, exist_ok=True)
 
 USERS_DB = "db/users.csv"
 FILES_DB = "db/files.csv"
 
+@st.cache_data(ttl=5)
 def load_data(path, columns):
     if os.path.exists(path):
         return pd.read_csv(path)
     return pd.DataFrame(columns=columns)
 
 # --- 3. تصميم الواجهة ---
-st.set_page_config(page_title="منصة الطالب الذكي - الأستاذ حسام", layout="wide")
+st.set_page_config(page_title="منصة الطالب الذكي", layout="wide")
 
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #D32F2F; color: white; }
+    .main .block-container { max-width: 900px; padding-bottom: 10rem; }
+    .stButton>button { width: 100%; border-radius: 10px; height: 3.5em; background-color: #D32F2F; color: white; font-weight: bold; border: none; }
+    .upload-box { border: 1px dashed #D32F2F; padding: 10px; border-radius: 10px; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# خريطة المواد
 subs_map = {
     "التاسع": ["فيزياء", "كيمياء", "علوم", "رياضيات", "فرنسي", "إنكليزي", "عربي"],
     "البكالوريا العلمي": ["فيزياء", "كيمياء", "علوم", "رياضيات", "فرنسي", "عربي"],
     "البكالوريا الأدبي": ["فلسفة", "تاريخ", "جغرافيا", "فرنسي", "عربي"]
 }
 
-# --- 4. نظام الدخول ---
+# --- 4. الدخول ---
 if "user_data" not in st.session_state:
-    st.title("🚀 مرحباً بك في منصة الأستاذ حسام")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("🔐 تسجيل الدخول")
-        u = st.text_input("اسم المستخدم", key="login_u")
-        p = st.text_input("كلمة المرور", type="password", key="login_p")
-        if st.button("دخول"):
+    st.title("🚀 منصة الطالب الذكي")
+    t_log, t_sign = st.tabs(["🔐 دخول", "📝 حساب جديد"])
+    with t_log:
+        u, p = st.text_input("اسم المستخدم"), st.text_input("كلمة المرور", type="password")
+        if st.button("تسجيل الدخول"):
             if u == "Hosam" and p == "Anahosam031007":
                 st.session_state["user_data"] = {"name": u, "role": "Owner", "grade": "الكل"}
                 st.rerun()
@@ -58,91 +54,86 @@ if "user_data" not in st.session_state:
                 if not match.empty:
                     st.session_state["user_data"] = {"name": u, "role": match.iloc[0]["role"], "grade": match.iloc[0]["grade"]}
                     st.rerun()
-                else: st.error("خطأ في البيانات!")
-
-    with col2:
-        st.subheader("📝 إنشاء حساب جديد")
-        new_u = st.text_input("الاسم الجديد")
-        new_p = st.text_input("كلمة المرور الجديدة", type="password")
-        new_r = st.selectbox("نوع الحساب", ["طالب", "أستاذ"])
-        new_g = st.selectbox("الصف", list(subs_map.keys())) if new_r == "طالب" else "الكل"
-        if st.button("تأكيد الاشتراك"):
+                else: st.error("خطأ بالبيانات")
+    with t_sign:
+        nu, np = st.text_input("الاسم الجديد"), st.text_input("كلمة المرور الجديدة", type="password")
+        nr = st.selectbox("الرتبة", ["طالب", "أستاذ"])
+        ng = st.selectbox("الصف", list(subs_map.keys())) if nr == "طالب" else "الكل"
+        if st.button("إنشاء الحساب"):
             users = load_data(USERS_DB, ["user", "pass", "role", "grade"])
-            if new_u in users["user"].values: st.error("الاسم موجود مسبقاً!")
-            else:
-                new_entry = pd.DataFrame([{"user": new_u, "pass": new_p, "role": new_r, "grade": new_g}])
-                pd.concat([users, new_entry]).to_csv(USERS_DB, index=False)
-                st.success("تم بنجاح! سجل دخولك الآن.")
+            pd.concat([users, pd.DataFrame([{"user": nu, "pass": np, "role": nr, "grade": ng}])]).to_csv(USERS_DB, index=False)
+            st.success("تم بنجاح")
 
-# --- 5. محتوى التطبيق بعد الدخول ---
 else:
-    data = st.session_state["user_data"]
-    st.sidebar.title(f"👤 {data['name']}")
-    st.sidebar.info(f"الرتبة: {data['role']}")
-    if st.sidebar.button("تسجيل الخروج"):
+    user = st.session_state["user_data"]
+    st.sidebar.title(f"👋 {user['name']}")
+    if st.sidebar.button("خروج"):
         del st.session_state["user_data"]; st.rerun()
 
-    # واجهة المدير (حسام)
-    if data["role"] == "Owner":
-        st.header("👑 لوحة التحكم المطلقة")
-        tab1, tab2 = st.tabs(["👥 الأعضاء", "📂 المنشورات"])
-        with tab1:
-            users = load_data(USERS_DB, ["user", "pass", "role", "grade"])
-            for i, r in users.iterrows():
-                c1, c2 = st.columns([3, 1])
-                c1.write(f"**{r['user']}** - {r['role']} ({r['grade']})")
-                if c2.button("حذف", key=f"del_u_{i}"):
-                    users.drop(i).to_csv(USERS_DB, index=False); st.rerun()
-        with tab2:
-            files = load_data(FILES_DB, ["name", "grade", "sub", "type"])
-            for i, r in files.iterrows():
-                c1, c2 = st.columns([3, 1])
-                c1.write(f"**{r['name']}** - {r['grade']}")
-                if c2.button("حذف", key=f"del_f_{i}"):
-                    files.drop(i).to_csv(FILES_DB, index=False); st.rerun()
-
-    # واجهة الأستاذ
-    elif data["role"] == "أستاذ":
-        st.header("👨‍🏫 لوحة نشر الدروس والاختبارات")
-        tg = st.selectbox("الصف المستهدف", list(subs_map.keys()))
-        ts = st.selectbox("المادة", subs_map[tg])
-        tt = st.radio("نوع الملف", ["بحث PDF", "نموذج امتحان", "سلم تصحيح"])
-        up = st.file_uploader("ارفع الملف")
-        if up and st.button("نشر الآن"):
-            f_db = load_data(FILES_DB, ["name", "grade", "sub", "type"])
-            new_f = pd.DataFrame([{"name": up.name, "grade": tg, "sub": ts, "type": tt}])
-            pd.concat([f_db, new_f]).to_csv(FILES_DB, index=False)
-            folder = {"بحث PDF": "lessons", "نموذج امتحان": "exams", "سلم تصحيح": "keys"}[tt]
-            with open(os.path.join(folder, up.name), "wb") as f: f.write(up.getbuffer())
-            st.success("✅ تم النشر بنجاح!")
-
-    # واجهة الطالب
-    else:
-        st.header(f"🎓 بوابة الطالب: {data['grade']}")
-        subject = st.selectbox("اختر المادة", subs_map[data['grade']])
-        t1, t2 = st.tabs(["📚 محتوى الدراسة", "🤖 ذكاء اصطناعي"])
+    # --- واجهة الأستاذ (المطورة) ---
+    if user["role"] == "أستاذ":
+        st.header("👨‍🏫 مركز رفع الملفات")
+        col_g, col_s = st.columns(2)
+        with col_g: tg = st.selectbox("اختر الصف:", list(subs_map.keys()))
+        with col_s: ts = st.selectbox("اختر المادة:", subs_map[tg])
         
-        with t1:
-            f_db = load_data(FILES_DB, ["name", "grade", "sub", "type"])
-            my_files = f_db[(f_db["grade"] == data["grade"]) & (f_db["sub"] == subject)]
-            if not my_files.empty:
-                for _, r in my_files.iterrows():
-                    folder = {"بحث PDF": "lessons", "نموذج امتحان": "exams", "سلم تصحيح": "keys"}[r['type']]
-                    with open(os.path.join(folder, r['name']), "rb") as f:
-                        st.download_button(f"تحميل {r['type']}: {r['name']}", f, file_name=r['name'])
-            else: st.info("لا يوجد ملفات مرفوعة حالياً.")
+        st.divider()
+        
+        # خانات الرفع المنفصلة
+        def upload_func(label, folder, type_name):
+            st.markdown(f"**📍 {label}**")
+            up = st.file_uploader(f"ارفع {label}", key=type_name)
+            if up and st.button(f"تأكيد رفع {label}", key=f"btn_{type_name}"):
+                f_name = f"{type_name}_{ts}_{up.name}"
+                with open(os.path.join(folder, f_name), "wb") as f: f.write(up.getbuffer())
+                f_db = load_data(FILES_DB, ["name", "grade", "sub", "type"])
+                pd.concat([f_db, pd.DataFrame([{"name": f_name, "grade": tg, "sub": ts, "type": type_name}])]).to_csv(FILES_DB, index=False)
+                st.success(f"تم رفع {label} بنجاح!")
 
-        with t2:
-            col_a, col_b = st.columns(2)
-            with col_a:
-                if st.button("📝 توليد نموذج امتحان"):
-                    with st.spinner("جاري كتابة الأسئلة..."):
-                        res = model.generate_content(f"اكتب نموذج امتحان {subject} لصف {data['grade']} منهاج سوري مع الحل.")
-                        st.write(res.text)
-            with col_b:
-                img = st.file_uploader("📸 ارفع صورة حلك للتصحيح", type=["jpg", "png", "jpeg"])
-                if img and st.button("بدء التصحيح"):
-                    with st.spinner("الذكاء الاصطناعي يحلل ورقتك..."):
-                        res = model.generate_content([f"أنت أستاذ خبير، صحح ورقة {subject} لصف {data['grade']} وأعطِ علامة من 100.", Image.open(img)])
-                        st.markdown("### 📝 النتيجة:")
-                        st.write(res.text)
+        c1, c2, c3 = st.columns(3)
+        with c1: upload_func("ملف البحث (PDF)", "lessons", "بحث")
+        with c2: upload_func("نموذج الامتحان", "exams", "نموذج")
+        with c3: upload_func("سلم التصحيح", "keys", "سلم")
+
+    # --- واجهة الطالب (المطورة) ---
+    elif user["role"] == "طالب":
+        st.header(f"🎓 بوابة {user['grade']}")
+        sub = st.selectbox("اختر المادة:", subs_map[user['grade']])
+        t_study, t_ai = st.tabs(["📚 ملفات الأستاذ", "🤖 المساعد الذكي"])
+        
+        with t_study:
+            f_db = load_data(FILES_DB, ["name", "grade", "sub", "type"])
+            my_f = f_db[(f_db["grade"] == user["grade"]) & (f_db["sub"] == sub)]
+            if not my_f.empty:
+                for _, r in my_f.iterrows():
+                    folder = {"بحث": "lessons", "نموذج": "exams", "سلم": "keys"}[r['type']]
+                    file_path = os.path.join(folder, r['name'])
+                    with open(file_path, "rb") as f:
+                        # إضافة application/pdf لضمان التحميل بشكل صحيح
+                        st.download_button(f"📥 تحميل {r['type']}: {r['name']}", f, file_name=r['name'], mime="application/pdf")
+            else: st.info("لا يوجد ملفات حالياً")
+
+        with t_ai:
+            if st.button("📝 توليد نموذج امتحاني شامل"):
+                with st.spinner("الذكاء الاصطناعي يقوم بصياغة الأسئلة..."):
+                    # أمر محسن للذكاء الاصطناعي
+                    prompt = f"أنت أستاذ سوري خبير. اكتب نموذج امتحان لمادة {sub} لصف {user['grade']} وفق منهاج وزارة التربية السورية. اجعل الأسئلة متنوعة (اختيار من متعدد، تعاريف، مسائل) مع توزيع الدرجات."
+                    res = model.generate_content(prompt)
+                    st.markdown(res.text)
+            
+            st.divider()
+            img = st.file_uploader("📸 تصحيح حل الطالب (ارفع صورة)", type=["jpg", "png", "jpeg"])
+            if img and st.button("✨ ابدأ التصحيح الفوري"):
+                with st.spinner("جاري التحليل..."):
+                    res = model.generate_content([f"صحح هذه الورقة لمادة {sub} {user['grade']} منهاج سوري، أعطِ ملاحظات دقيقة وعلامة من 100.", Image.open(img)])
+                    st.success("تم التصحيح!")
+                    st.write(res.text)
+
+    # --- واجهة المدير (حسام) ---
+    elif user["role"] == "Owner":
+        st.header("👑 لوحة الملك حسام")
+        u_df = load_data(USERS_DB, ["user", "pass", "role", "grade"])
+        st.dataframe(u_df, use_container_width=True)
+        if st.button("حذف كل البيانات (للتنظيف)"):
+            if os.path.exists(FILES_DB): os.remove(FILES_DB)
+            st.rerun()
