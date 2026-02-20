@@ -7,14 +7,14 @@ from datetime import datetime
 from gtts import gTTS
 import io
 import hashlib
+import re # تمت إضافة هذه المكتبة لاستخراج الدرجات بذكاء
 
 # --- 1. إعدادات الأمان والذكاء الاصطناعي ---
-# حل مشكلة الـ 404: التأكد من اسم الموديل الصحيح ومعالجة الخطأ
 try:
     if "GEMINI_API_KEY" in st.secrets:
         API_KEY = st.secrets["GEMINI_API_KEY"]
     else:
-        st.error("⚠️ مفتاح API غير موجود في Secrets. يرجى إضافته باسم GEMINI_API_KEY")
+        st.error("⚠️ مفتاح API غير موجود. يرجى التأكد من ملف .streamlit/secrets.toml")
         st.stop()
 except Exception as e:
     st.error(f"⚠️ خطأ في الوصول إلى Secrets: {e}")
@@ -22,10 +22,9 @@ except Exception as e:
 
 genai.configure(api_key=API_KEY)
 
-@st.cache_resource
+# تم إزالة @st.cache_resource لتجنب مشاكل فقدان الاتصال بالموديل
 def load_ai_model():
-    # استخدام المسار الكامل للموديل لتجنب خطأ 404
-    return genai.GenerativeModel("models/gemini-1.5-flash")
+    return genai.GenerativeModel("gemini-1.5-flash")
 
 def get_ai_response(prompt, image=None):
     try:
@@ -52,7 +51,6 @@ def speak_text(text):
         return None
 
 # --- 2. تهيئة قواعد البيانات والمجلدات ---
-# ضمان وجود المجلدات قبل البدء
 for folder in ['lessons', 'exams', 'db']:
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -73,7 +71,6 @@ def load_data(path):
     try:
         return pd.read_csv(path)
     except:
-        # في حال حدوث خطأ في الملف ننشئه من جديد بالفهارس الصحيحة
         return pd.DataFrame()
 
 # --- 3. تصميم الواجهة والثيم الذكي ---
@@ -193,30 +190,35 @@ else:
         with col2:
             ts = st.selectbox("المادة:", subs_map[tg])
         
-        type_f = st.radio("نوع الملف:", ["بحث", "نموذج امتحاني"])
-        up = st.file_uploader("اختر الملف (PDF)", type=['pdf'])
-        
-        if up is not None:
-            if st.button("🚀 رفع الملف الآن"):
-                # معالجة اسم الملف
-                clean_name = up.name.replace(' ', '_')
-                f_name = f"{type_f}_{ts}_{clean_name}"
-                folder = "lessons" if type_f == "بحث" else "exams"
-                
-                # حفظ الملف
-                file_path = os.path.join(folder, f_name)
-                with open(file_path, "wb") as f:
-                    f.write(up.getbuffer())
-                
-                # تحديث قاعدة البيانات
-                f_db = load_data(FILES_DB)
-                new_file = pd.DataFrame([{
-                    "name": f_name, "grade": tg, "sub": ts,
-                    "type": type_f, "date": datetime.now().strftime("%Y-%m-%d")
-                }])
-                pd.concat([f_db, new_file], ignore_index=True).to_csv(FILES_DB, index=False)
-                st.success(f"تم رفع {f_name} بنجاح!")
-                st.balloons()
+        # تم استخدام st.form لضمان استقرار رفع الملفات
+        with st.form("upload_form", clear_on_submit=True):
+            type_f = st.radio("نوع الملف:", ["بحث", "نموذج امتحاني"])
+            up = st.file_uploader("اختر الملف (PDF)", type=['pdf'])
+            submit_btn = st.form_submit_button("🚀 رفع الملف الآن")
+            
+            if submit_btn:
+                if up is not None:
+                    # معالجة اسم الملف
+                    clean_name = up.name.replace(' ', '_')
+                    f_name = f"{type_f}_{ts}_{clean_name}"
+                    folder = "lessons" if type_f == "بحث" else "exams"
+                    
+                    # حفظ الملف
+                    file_path = os.path.join(folder, f_name)
+                    with open(file_path, "wb") as f:
+                        f.write(up.getbuffer())
+                    
+                    # تحديث قاعدة البيانات
+                    f_db = load_data(FILES_DB)
+                    new_file = pd.DataFrame([{
+                        "name": f_name, "grade": tg, "sub": ts,
+                        "type": type_f, "date": datetime.now().strftime("%Y-%m-%d")
+                    }])
+                    pd.concat([f_db, new_file], ignore_index=True).to_csv(FILES_DB, index=False)
+                    st.success(f"تم رفع {f_name} بنجاح!")
+                    st.balloons()
+                else:
+                    st.error("⚠️ يرجى اختيار ملف أولاً قبل الضغط على زر الرفع.")
 
     elif user["role"] == "طالب":
         st.markdown(f'<div class="greeting-box"><h3>{greeting} يا بطل</h3><p>صفتك: {user["grade"]}</p></div>', unsafe_allow_html=True)
@@ -275,18 +277,20 @@ else:
                         Image.open(img)
                     )
                 st.info(res)
-                # محاولة استخراج الدرجة
+                # تم تحسين استخراج الدرجة باستخدام التعابير النمطية (Regex)
                 try:
-                    score = int(''.join(filter(str.isdigit, res.split()[0])))
-                    if score > 100: score = 100
-                    g_db = load_data(GRADES_DB)
-                    new_g = pd.DataFrame([{
-                        "user": user['user'], "sub": sub, "score": score, "date": datetime.now().strftime("%m-%d %H:%M")
-                    }])
-                    pd.concat([g_db, new_g], ignore_index=True).to_csv(GRADES_DB, index=False)
-                    st.toast(f"تم تسجيل الدرجة: {score}/100")
-                except:
-                    pass
+                    match = re.search(r'\d+', res)
+                    if match:
+                        score = int(match.group())
+                        if score > 100: score = 100
+                        g_db = load_data(GRADES_DB)
+                        new_g = pd.DataFrame([{
+                            "user": user['user'], "sub": sub, "score": score, "date": datetime.now().strftime("%m-%d %H:%M")
+                        }])
+                        pd.concat([g_db, new_g], ignore_index=True).to_csv(GRADES_DB, index=False)
+                        st.toast(f"تم تسجيل الدرجة: {score}/100")
+                except Exception as e:
+                    st.warning("لم يتمكن النظام من استخراج الدرجة رقمياً لحفظها، لكن التقييم النصي متاح أعلى.")
 
         with t_plan:
             st.subheader("📅 خطة الدراسة السريعة")
