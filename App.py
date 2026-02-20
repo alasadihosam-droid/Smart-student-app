@@ -18,8 +18,8 @@ else:
 
 def get_ai_response(prompt, image=None):
     try:
-        # استخدام flash-latest لضمان أعلى توافق
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # إضافة models/ قبل اسم الموديل لضمان التوافق
+        model = genai.GenerativeModel("models/gemini-1.5-flash")
         if image:
             response = model.generate_content([prompt, image])
         else:
@@ -49,8 +49,10 @@ init_db(FILES_DB, ["name", "grade", "sub", "type", "date"])
 init_db(GRADES_DB, ["user", "sub", "score", "date"])
 
 def load_data(path):
-    try: return pd.read_csv(path)
-    except: return pd.DataFrame()
+    try: 
+        return pd.read_csv(path)
+    except: 
+        return pd.DataFrame()
 
 # --- 3. الواجهة ---
 st.set_page_config(page_title="منصة حسام التعليمية", layout="wide")
@@ -67,6 +69,7 @@ if "user_data" not in st.session_state:
 # --- نظام الدخول ---
 if st.session_state["user_data"] is None:
     tab1, tab2 = st.tabs(["تسجيل الدخول", "حساب جديد"])
+    
     with tab1:
         u = st.text_input("اسم المستخدم")
         p = st.text_input("كلمة المرور", type="password")
@@ -82,6 +85,7 @@ if st.session_state["user_data"] is None:
                         st.session_state["user_data"] = match.iloc[0].to_dict()
                         st.rerun()
                 st.error("البيانات غير صحيحة")
+                
     with tab2:
         nu = st.text_input("الاسم")
         np = st.text_input("كلمة السر الجديدة", type="password")
@@ -99,27 +103,34 @@ else:
         st.session_state["user_data"] = None
         st.rerun()
 
+    # --- واجهة الأستاذ / المالك ---
     if user["role"] == "أستاذ" or user["role"] == "Owner":
         st.header("📤 مركز الرفع")
-        # استخدام FORM ضروري جداً للموبايل لمنع Network Error
+        
+        # القوائم خارج الفورم لتتحدث برمجياً على الموبايل بدون مشاكل
+        target_g = st.selectbox("الصف المستهدف", list(subs_map.keys()))
+        target_s = st.selectbox("المادة", subs_map[target_g])
+        f_type = st.radio("النوع", ["بحث", "نموذج امتحاني"])
+        
+        # الفورم فقط لرفع الملف
         with st.form("upload_form"):
-            target_g = st.selectbox("الصف المستهدف", list(subs_map.keys()))
-            target_s = st.selectbox("المادة", subs_map[target_g])
-            f_type = st.radio("النوع", ["بحث", "نموذج امتحاني"])
             uploaded_file = st.file_uploader("اختر ملف PDF", type=['pdf'])
             submit = st.form_submit_button("رفع الملف الآن")
             
             if submit and uploaded_file:
                 fname = f"{f_type}_{target_s}_{uploaded_file.name}".replace(" ", "_")
                 path = os.path.join("lessons" if f_type == "بحث" else "exams", fname)
+                
+                # استخدام read() للتعامل الآمن مع الملفات المرفوعة
                 with open(path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
+                    f.write(uploaded_file.read())
                 
                 f_db = load_data(FILES_DB)
                 new_f = pd.DataFrame([{"name": fname, "grade": target_g, "sub": target_s, "type": f_type, "date": datetime.now().date()}])
                 pd.concat([f_db, new_f], ignore_index=True).to_csv(FILES_DB, index=False)
                 st.success("تم الرفع بنجاح ✅")
 
+    # --- واجهة الطالب ---
     if user["role"] == "طالب":
         st.title(f"أهلاً {user['user']}")
         sel_sub = st.selectbox("اختر المادة", subs_map[user['grade']])
@@ -131,13 +142,20 @@ else:
             if not files.empty:
                 for _, r in files.iterrows():
                     folder = "lessons" if r['type'] == "بحث" else "exams"
-                    with open(os.path.join(folder, r['name']), "rb") as f:
-                        st.download_button(f"تحميل {r['name']}", f, file_name=r['name'])
-            else: st.info("لا توجد ملفات")
+                    file_path = os.path.join(folder, r['name'])
+                    # التأكد من وجود الملف فعلياً قبل إظهار زر التحميل لتجنب الأخطاء
+                    if os.path.exists(file_path):
+                        with open(file_path, "rb") as f:
+                            st.download_button(f"تحميل {r['name']}", f, file_name=r['name'])
+            else: 
+                st.info("لا توجد ملفات حالياً لهذه المادة.")
 
         with t2:
             q = st.text_input("اسأل أي سؤال...")
             if st.button("إرسال"):
-                with st.spinner("جاري الرد..."):
-                    res = get_ai_response(f"كأستاذ، أجب الطالب في مادة {sel_sub}: {q}")
-                    st.write(res)
+                if q:
+                    with st.spinner("جاري التفكير..."):
+                        res = get_ai_response(f"كأستاذ، أجب الطالب في مادة {sel_sub}: {q}")
+                        st.write(res)
+                else:
+                    st.warning("الرجاء كتابة سؤال أولاً.")
