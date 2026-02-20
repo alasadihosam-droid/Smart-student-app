@@ -1,5 +1,5 @@
-streamlit==1.31.0
+streamlit
 pandas
-pillow
-google-generativeai>=0.5.4
+Pillow
+google-generativeai>=0.8.0
 gTTS
