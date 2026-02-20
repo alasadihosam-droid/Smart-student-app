@@ -16,7 +16,7 @@ try:
     if "GEMINI_API_KEY" in st.secrets:
         API_KEY = st.secrets["GEMINI_API_KEY"]
     else:
-        st.error("⚠️ مفتاح API غير موجود. يرجى التأكد من إضافة GEMINI_API_KEY في ملف Secrets في إعدادات Streamlit.")
+        st.error("⚠️ مفتاح API غير موجود. يرجى التأكد من إضافة GEMINI_API_KEY في ملف Secrets.")
         st.stop()
 except Exception as e:
     st.error(f"⚠️ خطأ في الوصول إلى Secrets: {e}")
@@ -24,23 +24,34 @@ except Exception as e:
 
 genai.configure(api_key=API_KEY)
 
-# الدالة المحدثة للذكاء الاصطناعي مع معالجة خطأ 429 (تجاوز الحد المجاني)
 def get_ai_response(prompt, image=None):
+    """دالة ذكية تبحث عن الموديل المتاح وتتجنب الأخطاء (404 و 429)"""
     try:
-        # إجبار التطبيق على استخدام الموديل المستقر والمجاني فقط لتجنب خطأ 429
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # جلب كل الموديلات المتاحة لمفتاحك
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
-        if image:
-            response = model.generate_content([prompt, image])
-        else:
-            response = model.generate_content(prompt)
-        return response.text
+        # استبعاد الموديلات التجريبية (مثل 2.5) التي تسبب خطأ 429 (الرصيد صفر)
+        safe_models = [m for m in available_models if "2.5" not in m]
+        
+        if not safe_models:
+            return "⚠️ عذراً، جميع الموديلات المتاحة في حسابك غير مجانية أو محجوبة. تأكد من إعدادات حسابك."
+
+        # حلقة لتجربة الموديلات المتاحة واحداً تلو الآخر حتى ينجح أحدهم
+        for model_name in safe_models:
+            try:
+                model = genai.GenerativeModel(model_name)
+                if image:
+                    response = model.generate_content([prompt, image])
+                else:
+                    response = model.generate_content(prompt)
+                return response.text # إذا نجح، يرجع الرد ويوقف البحث
+            except Exception:
+                continue # إذا فشل، جرب الموديل التالي
+                
+        return "⚠️ تم رفض الاتصال من جوجل (نفاذ الرصيد أو حظر جغرافي). جرب تشغيل VPN."
         
     except Exception as e:
-        err_str = str(e)
-        if "429" in err_str or "quota" in err_str.lower():
-            return "⚠️ خطأ 429: لقد استهلكت الرصيد المجاني، أو أن الباقة المجانية لجوجل محجوبة في بلدك. (جرب تشغيل VPN عند استخدام التطبيق أو تأكد من حصة حسابك)."
-        return f"⚠️ خطأ تقني من جوجل: {err_str}"
+        return f"⚠️ خطأ عام في الاتصال: {str(e)}"
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -212,6 +223,7 @@ else:
     # --- واجهة الأستاذ ---
     elif user["role"] == "أستاذ":
         st.header("👨‍🏫 مركز رفع الدروس والملفات")
+        st.info("💡 لضمان نجاح الرفع، يفضل استخدام لابتوب أو متصفح خفي (Incognito) من الموبايل.")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -221,7 +233,6 @@ else:
         
         type_f = st.radio("نوع الملف:", ["بحث", "نموذج امتحاني"])
         
-        # أداة الرفع بدون st.form لتجنب مشاكل الموبايل
         up = st.file_uploader("اختر الملف (PDF)", type=['pdf'])
         
         if st.button("🚀 رفع الملف الآن"):
@@ -280,7 +291,7 @@ else:
                                     data=f, file_name=r['name'], key=r['name']
                                 )
                         else:
-                            st.warning(f"الملف {r['name']} مسجل ولكنه غير موجود.")
+                            st.warning(f"الملف {r['name']} مسجل ولكنه غير موجود في النظام.")
             else:
                 st.info("المكتبة فارغة حالياً.")
 
@@ -310,7 +321,7 @@ else:
 
             st.markdown("---")
             st.subheader("📸 مصحح الأوراق الذكي")
-            img = st.file_uploader("ارفع صورة الحل", type=["jpg", "png", "jpeg"])
+            img = st.file_uploader("ارفع صورة الحل لتقييمها", type=["jpg", "png", "jpeg"])
             
             if img and st.button("ابدأ عملية التصحيح"):
                 with st.spinner("جاري قراءة الصورة وتحليل الحل..."):
