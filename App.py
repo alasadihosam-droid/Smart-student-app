@@ -9,17 +9,14 @@ import io
 import hashlib
 
 # --- 1. إعدادات الأمان والذكاء الاصطناعي ---
-try:
-    API_KEY = st.secrets["GEMINI_API_KEY"]
-except:
-    st.error("⚠️ لم يتم العثور على مفتاح API في Secrets.")
-    st.stop()
-
+# محاولة جلب المفتاح من Secrets أو استخدام المفتاح المباشر كخيار احتياطي
+API_KEY = st.secrets.get("GEMINI_API_KEY", "AIzaSyCn33VD-Dc241aVPEkh7HuSQRw0K1fHGB4")
 genai.configure(api_key=API_KEY)
 
 @st.cache_resource
 def load_ai_model():
-    return genai.GenerativeModel("gemini-1.5-flash")
+    # استخدام latest لحل مشاكل التوافر في بعض المناطق (خطأ 404)
+    return genai.GenerativeModel("gemini-1.5-flash-latest")
 
 def get_ai_response(prompt, image=None):
     try:
@@ -30,7 +27,7 @@ def get_ai_response(prompt, image=None):
             response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"⚠️ عذراً، هناك مشكلة في الاتصال. (Error: {str(e)})"
+        return f"⚠️ عذراً، هناك مشكلة في الاتصال بالمعلم الذكي. (Error: {str(e)})"
 
 # دالة التشفير لحماية كلمات المرور
 def hash_password(password):
@@ -39,7 +36,9 @@ def hash_password(password):
 # دالة المعلم الناطق
 def speak_text(text):
     try:
-        tts = gTTS(text=text[:250], lang='ar')
+        # تنظيف النص من الرموز قبل النطق
+        clean_text = text[:250].replace("*", "").replace("#", "").replace("-", "")
+        tts = gTTS(text=clean_text, lang='ar')
         fp = io.BytesIO()
         tts.write_to_fp(fp)
         fp.seek(0)
@@ -47,7 +46,8 @@ def speak_text(text):
     except:
         return None
 
-# --- 2. نظام المجلدات وقواعد البيانات ---
+# --- 2. نظام المجلدات وقواعد البيانات الذكي ---
+# إنشاء المجلدات إذا كانت مفقودة
 for folder in ['lessons', 'exams', 'db']:
     os.makedirs(folder, exist_ok=True)
 
@@ -64,7 +64,13 @@ init_db(FILES_DB, ["name", "grade", "sub", "type", "date"])
 init_db(GRADES_DB, ["user", "sub", "score", "date"])
 
 def load_data(path):
-    return pd.read_csv(path)
+    try:
+        return pd.read_csv(path)
+    except:
+        # في حال حدوث خطأ في قراءة الملف، نرجع جدول فارغ بالأعمدة الصحيحة
+        if "users" in path: return pd.DataFrame(columns=["user", "pass", "role", "grade"])
+        if "files" in path: return pd.DataFrame(columns=["name", "grade", "sub", "type", "date"])
+        return pd.DataFrame(columns=["user", "sub", "score", "date"])
 
 # --- 3. إدارة الجلسة ---
 if "user_data" not in st.session_state:
@@ -81,6 +87,7 @@ else:
 
 st.set_page_config(page_title="منصة حسام الذكية", layout="wide")
 
+# تصميم CSS محسن
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {bg}; color: {txt}; }}
@@ -107,7 +114,7 @@ subs_map = {
     "البكالوريا الأدبي": ["فلسفة", "تاريخ", "جغرافيا", "فرنسي", "عربي"]
 }
 
-# --- 5. منطق الدخول ---
+# --- 5. منطق الدخول والواجهات ---
 if st.session_state["user_data"] is None:
     st.markdown(f'<div class="greeting-box"><h1>{greeting}</h1><p>أهلاً بك في منصة حسام التعليمية المطورة</p></div>', unsafe_allow_html=True)
     t_log, t_sign = st.tabs(["🔐 تسجيل الدخول", "📝 إنشاء حساب"])
@@ -220,11 +227,11 @@ else:
 
             st.divider()
             st.subheader("📸 مصحح الأوراق الآلي")
-            img = st.file_uploader("ارفع صورة حلك", type=["jpg", "png", "jpeg"])
-            if img and st.button("تصحيح الحل"):
-                res = get_ai_response(f"صحح ورقة الطالب في {sub} لصف {user['grade']} واعط علامة من 100.", Image.open(img))
+            img_file = st.file_uploader("ارفع صورة حلك", type=["jpg", "png", "jpeg"])
+            if img_file and st.button("تصحيح الحل"):
+                img = Image.open(img_file)
+                res = get_ai_response(f"صحح ورقة الطالب في {sub} لصف {user['grade']} واعط علامة من 100.", img)
                 st.write(res)
-                # حفظ الدرجة تلقائياً إذا وجدت في النص
                 try:
                     score = [int(s) for s in res.split() if s.isdigit() and int(s) <= 100][0]
                     g_db = load_data(GRADES_DB)
@@ -248,4 +255,4 @@ else:
             if not my_scores.empty:
                 st.line_chart(my_scores.set_index("date")["score"])
                 st.write(f"متوسط درجاتك: {my_scores['score'].mean():.1f}%")
-            else: st.info("لا توجد درجات مسجلة بعد. استخدم المصحح الآلي لتقييم حلك!")
+            else: st.info("لا توجد درجات مسجلة بعد.")
