@@ -23,8 +23,8 @@ except Exception as e:
 genai.configure(api_key=API_KEY)
 
 def load_ai_model():
-    # تم التصحيح هنا: إضافة models/ قبل اسم الموديل لحل مشكلة 404
-    return genai.GenerativeModel("models/gemini-1.5-flash")
+    # تم حل مشكلة 404: إرجاع الاسم الأساسي للموديل بدون أي إضافات
+    return genai.GenerativeModel("gemini-1.5-flash")
 
 def get_ai_response(prompt, image=None):
     try:
@@ -190,32 +190,30 @@ else:
         with col2:
             ts = st.selectbox("المادة:", subs_map[tg])
         
-        with st.form("upload_form", clear_on_submit=True):
-            type_f = st.radio("نوع الملف:", ["بحث", "نموذج امتحاني"])
-            up = st.file_uploader("اختر الملف (PDF)", type=['pdf'])
-            submit_btn = st.form_submit_button("🚀 رفع الملف الآن")
-            
-            if submit_btn:
-                if up is not None:
-                    clean_name = up.name.replace(' ', '_')
-                    f_name = f"{type_f}_{ts}_{clean_name}"
-                    folder = "lessons" if type_f == "بحث" else "exams"
-                    
-                    file_path = os.path.join(folder, f_name)
-                    # تم التصحيح هنا: استخدام read() بدلاً من getbuffer() لدعم هواتف الأندرويد والآيفون بشكل ممتاز
-                    with open(file_path, "wb") as f:
-                        f.write(up.read())
-                    
-                    f_db = load_data(FILES_DB)
-                    new_file = pd.DataFrame([{
-                        "name": f_name, "grade": tg, "sub": ts,
-                        "type": type_f, "date": datetime.now().strftime("%Y-%m-%d")
-                    }])
-                    pd.concat([f_db, new_file], ignore_index=True).to_csv(FILES_DB, index=False)
-                    st.success(f"تم رفع {f_name} بنجاح!")
-                    st.balloons()
-                else:
-                    st.error("⚠️ يرجى اختيار ملف أولاً قبل الضغط على زر الرفع.")
+        # تم حل مشكلة AxiosError: إزالة الفورم واستخدام أزرار عادية
+        type_f = st.radio("نوع الملف:", ["بحث", "نموذج امتحاني"])
+        up = st.file_uploader("اختر الملف (PDF)", type=['pdf'])
+        
+        if st.button("🚀 رفع الملف الآن"):
+            if up is not None:
+                clean_name = up.name.replace(' ', '_')
+                f_name = f"{type_f}_{ts}_{clean_name}"
+                folder = "lessons" if type_f == "بحث" else "exams"
+                
+                file_path = os.path.join(folder, f_name)
+                with open(file_path, "wb") as f:
+                    f.write(up.read())
+                
+                f_db = load_data(FILES_DB)
+                new_file = pd.DataFrame([{
+                    "name": f_name, "grade": tg, "sub": ts,
+                    "type": type_f, "date": datetime.now().strftime("%Y-%m-%d")
+                }])
+                pd.concat([f_db, new_file], ignore_index=True).to_csv(FILES_DB, index=False)
+                st.success(f"تم رفع {f_name} بنجاح!")
+                st.balloons()
+            else:
+                st.error("⚠️ يرجى اختيار ملف أولاً قبل الضغط على زر الرفع.")
 
     elif user["role"] == "طالب":
         st.markdown(f'<div class="greeting-box"><h3>{greeting} يا بطل</h3><p>صفتك: {user["grade"]}</p></div>', unsafe_allow_html=True)
