@@ -24,22 +24,11 @@ except Exception as e:
 
 genai.configure(api_key=API_KEY)
 
-# الدالة الذكية الجديدة للبحث عن الموديل المتاح وتجنب خطأ 404
+# الدالة المحدثة للذكاء الاصطناعي مع معالجة خطأ 429 (تجاوز الحد المجاني)
 def get_ai_response(prompt, image=None):
     try:
-        # 1. جلب قائمة بكل الموديلات المتاحة لمفتاح الـ API الخاص بك
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        if not available_models:
-            return "⚠️ مفتاح الـ API لا يدعم أي موديل حالياً. تأكد من إعدادات حسابك في Google AI Studio."
-            
-        # 2. اختيار أفضل موديل متاح (نبحث عن flash أو pro، وإلا نختار أول موديل متاح)
-        chosen_model = next((m for m in available_models if '1.5-flash' in m), None)
-        if not chosen_model:
-            chosen_model = next((m for m in available_models if 'pro' in m), available_models[0])
-            
-        # 3. الاتصال باستخدام الموديل الذي تم العثور عليه
-        model = genai.GenerativeModel(chosen_model)
+        # إجبار التطبيق على استخدام الموديل المستقر والمجاني فقط لتجنب خطأ 429
+        model = genai.GenerativeModel("gemini-1.5-flash")
         
         if image:
             response = model.generate_content([prompt, image])
@@ -48,7 +37,10 @@ def get_ai_response(prompt, image=None):
         return response.text
         
     except Exception as e:
-        return f"⚠️ خطأ تقني من سيرفرات جوجل: {str(e)}"
+        err_str = str(e)
+        if "429" in err_str or "quota" in err_str.lower():
+            return "⚠️ خطأ 429: لقد استهلكت الرصيد المجاني، أو أن الباقة المجانية لجوجل محجوبة في بلدك. (جرب تشغيل VPN عند استخدام التطبيق أو تأكد من حصة حسابك)."
+        return f"⚠️ خطأ تقني من جوجل: {err_str}"
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
