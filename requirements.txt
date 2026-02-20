@@ -1,6 +1,5 @@
-streamlit
-google-generativeai
-PyPDF2
+streamlit==1.31.0
+pandas
+pillow
+google-generativeai>=0.5.4
 gTTS
-Pillow
-google-generativeai>=0.7.0
