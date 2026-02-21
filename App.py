@@ -11,7 +11,7 @@ import re
 import requests
 
 # ==========================================
-# 1. إعدادات الأمان، الذكاء الاصطناعي والتلغرام
+# 1. إعدادات الأمان والذكاء الاصطناعي
 # ==========================================
 try:
     if "GEMINI_API_KEY" in st.secrets:
@@ -31,24 +31,15 @@ def get_ai_response(prompt, image=None):
     try:
         available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         safe_models = [m for m in available_models if "2.5" not in m]
-        
-        if not safe_models:
-            return "⚠️ عذراً، جميع الموديلات المتاحة في حسابك غير مجانية. تأكد من الإعدادات."
-
+        if not safe_models: return "⚠️ عذراً، جميع الموديلات المتاحة في حسابك غير مجانية."
         for model_name in safe_models:
             try:
                 model = genai.GenerativeModel(model_name)
-                if image:
-                    response = model.generate_content([prompt, image])
-                else:
-                    response = model.generate_content(prompt)
-                return response.text 
-            except Exception:
-                continue 
-                
+                if image: return model.generate_content([prompt, image]).text
+                else: return model.generate_content(prompt).text
+            except Exception: continue 
         return "⚠️ تم رفض الاتصال. جرب تشغيل VPN."
-    except Exception as e:
-        return f"⚠️ خطأ عام في الاتصال: {str(e)}"
+    except Exception as e: return f"⚠️ خطأ عام: {str(e)}"
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -60,131 +51,73 @@ def speak_text(text):
         tts.write_to_fp(fp)
         fp.seek(0)
         return fp
-    except:
-        return None
+    except: return None
 
-# ==========================================
-# دوال التواصل مع بوت التلغرام
-# ==========================================
 def get_telegram_updates(token):
-    url = f"https://api.telegram.org/bot{token}/getUpdates"
     try:
-        r = requests.get(url).json()
-        if r.get("ok"):
-            return r["result"]
-    except:
-        pass
+        r = requests.get(f"https://api.telegram.org/bot{token}/getUpdates").json()
+        if r.get("ok"): return r["result"]
+    except: pass
     return []
 
 def download_telegram_file(token, file_id, dest_path):
-    file_info_url = f"https://api.telegram.org/bot{token}/getFile?file_id={file_id}"
     try:
-        r = requests.get(file_info_url).json()
+        r = requests.get(f"https://api.telegram.org/bot{token}/getFile?file_id={file_id}").json()
         if r.get("ok"):
             file_path = r["result"]["file_path"]
-            download_url = f"https://api.telegram.org/file/bot{token}/{file_path}"
-            file_data = requests.get(download_url).content
-            with open(dest_path, "wb") as f:
-                f.write(file_data)
+            file_data = requests.get(f"https://api.telegram.org/file/bot{token}/{file_path}").content
+            with open(dest_path, "wb") as f: f.write(file_data)
             return True
-    except:
-        pass
+    except: pass
     return False
 
 # ==========================================
 # 2. تهيئة قواعد البيانات والمجلدات
 # ==========================================
-# ضفنا مجلد profiles لحفظ صور المستخدمين/المالك
 for folder in ['lessons', 'exams', 'db', 'profiles']:
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    if not os.path.exists(folder): os.makedirs(folder)
 
 USERS_DB = "db/users.csv"
 FILES_DB = "db/files.csv"
 GRADES_DB = "db/grades.csv"
+NOTIFY_DB = "db/notifications.csv" # قاعدة بيانات تنويهات الأساتذة
 
 def init_db(path, columns):
-    if not os.path.exists(path):
-        pd.DataFrame(columns=columns).to_csv(path, index=False)
+    if not os.path.exists(path): pd.DataFrame(columns=columns).to_csv(path, index=False)
 
 init_db(USERS_DB, ["user", "pass", "role", "grade", "fb_link"])
 init_db(FILES_DB, ["name", "grade", "sub", "type", "date"])
 init_db(GRADES_DB, ["user", "sub", "score", "date"])
+init_db(NOTIFY_DB, ["sender", "message", "date"])
 
 def load_data(path):
-    try:
-        return pd.read_csv(path)
-    except:
-        return pd.DataFrame()
-
-db_users_check = load_data(USERS_DB)
-if not db_users_check.empty and "fb_link" not in db_users_check.columns:
-    db_users_check["fb_link"] = ""
-    db_users_check.to_csv(USERS_DB, index=False)
+    try: return pd.read_csv(path)
+    except: return pd.DataFrame()
 
 # ==========================================
-# 3. إعدادات الواجهة والترحيب الزمني
+# 3. إعدادات الواجهة والترحيب الزمني (بدون لاق)
 # ==========================================
 st.set_page_config(page_title="منصة سند التعليمية", layout="wide", page_icon="🎓")
 
-# تحديد وقت الترحيب واللون
 hour = datetime.now().hour
-if 5 <= hour < 12:
-    time_greeting = "صباح الخير ☀️"
-    bg, txt, card_bg, border_c = "#F0F2F6", "#1E1E1E", "#FFFFFF", "#D32F2F"
-elif 12 <= hour < 18:
-    time_greeting = "طاب نهارك 🌤️"
-    bg, txt, card_bg, border_c = "#F0F2F6", "#1E1E1E", "#FFFFFF", "#D32F2F"
-else:
-    time_greeting = "مساء الخير 🌙"
-    bg, txt, card_bg, border_c = "#0E1117", "#FAFAFA", "#1E1E1E", "#FF5252"
+if 5 <= hour < 12: time_greeting = "صباح الخير ☀️"
+elif 12 <= hour < 18: time_greeting = "طاب نهارك 🌤️"
+else: time_greeting = "مساء الخير 🌙"
 
 st.markdown("""
     <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-
+    #MainMenu, footer, header {visibility: hidden;}
     .stButton>button { 
-        width: 100%; 
-        border-radius: 10px; 
-        background: linear-gradient(135deg, #1E88E5, #1565C0); 
-        color: white; 
-        font-weight: bold; 
-        border: none;
-        padding: 0.6rem;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        width: 100%; border-radius: 8px; background: #1E88E5; color: white; 
+        font-weight: bold; border: none; padding: 0.5rem; transition: 0.2s;
     }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(0,0,0,0.2);
-    }
-    .stButton>button:active {
-        transform: translateY(0px);
-    }
-
+    .stButton>button:active { transform: scale(0.98); }
     .modern-box { 
-        padding: 20px; 
-        background-color: rgba(30, 136, 229, 0.05); 
-        border-radius: 15px; 
-        border-right: 4px solid #1E88E5; 
-        margin-bottom: 20px;
+        padding: 15px; background-color: rgba(30, 136, 229, 0.05); 
+        border-radius: 10px; border-right: 4px solid #1E88E5; margin-bottom: 15px;
     }
-    .welcome-title {
-        font-size: 2rem;
-        font-weight: 800;
-        text-align: center;
-        margin-bottom: 0px;
-        color: #1E88E5;
-    }
-    .programmer-tag {
-        font-size: 0.9rem;
-        text-align: center;
-        font-weight: 600;
-        opacity: 0.7;
-        margin-top: 5px;
-    }
+    .welcome-title { font-size: 1.8rem; font-weight: bold; text-align: center; color: #1E88E5; }
+    .programmer-tag { font-size: 0.85rem; text-align: center; font-weight: bold; opacity: 0.7; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -194,133 +127,110 @@ subs_map = {
     "البكالوريا الأدبي": ["فلسفة", "تاريخ", "جغرافيا", "فرنسي", "عربي"]
 }
 
-if "user_data" not in st.session_state:
-    st.session_state["user_data"] = None
-if "chat_history" not in st.session_state:
-    st.session_state["chat_history"] = []
-if "oral_exam_history" not in st.session_state:
-    st.session_state["oral_exam_history"] = []
+if "user_data" not in st.session_state: st.session_state["user_data"] = None
+if "chat_history" not in st.session_state: st.session_state["chat_history"] = []
+if "oral_exam_history" not in st.session_state: st.session_state["oral_exam_history"] = []
+
+# ==========================================
+# نظام تسجيل الدخول التلقائي (حفظ الجلسة عند التحديث)
+# ==========================================
+if st.session_state["user_data"] is None and "session_token" in st.query_params:
+    token = st.query_params["session_token"]
+    if token == "Hosam":
+        st.session_state["user_data"] = {"user": "Hosam", "role": "Owner", "grade": "الكل"}
+    else:
+        users = load_data(USERS_DB)
+        match = users[users["user"] == token]
+        if not match.empty:
+            st.session_state["user_data"] = match.iloc[0].to_dict()
 
 # ==========================================
 # 4. شاشة الدخول والتسجيل
 # ==========================================
 if st.session_state["user_data"] is None:
-    st.markdown(f"""
-        <div class="modern-box" style="text-align: center;">
-            <div class="welcome-title">{time_greeting}، مرحباً في منصة سند التعليمية</div>
-            <div class="programmer-tag">💻 برمجة الأستاذ حسام الأسدي</div>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f'<div class="modern-box"><div class="welcome-title">{time_greeting}، مرحباً في سند</div><div class="programmer-tag">💻 برمجة الأستاذ حسام الأسدي</div></div>', unsafe_allow_html=True)
     
-    t_log, t_sign = st.tabs(["🔐 تسجيل الدخول", "📝 إنشاء حساب موثق"])
+    t_log, t_sign = st.tabs(["🔐 تسجيل الدخول", "📝 إنشاء حساب طالب"])
     
     with t_log:
-        st.markdown("### 🔑 تسجيل الدخول")
-        login_col1, login_col2 = st.columns([1, 1])
-        with login_col1:
-            u = st.text_input("الاسم الكامل", key="login_u")
-        with login_col2:
-            p = st.text_input("كلمة المرور", type="password", key="login_p")
+        # استخدام st.form لتحفيز الموبايل على حفظ كلمة السر
+        with st.form("login_form"):
+            st.markdown("### 🔑 تسجيل الدخول")
+            u = st.text_input("الاسم الكامل")
+            p = st.text_input("كلمة المرور", type="password")
+            submit = st.form_submit_button("دخول المنصة 🚀")
             
-        if st.button("دخول المنصة 🚀"):
-            if u == "Hosam" and p == "hosam031007":
-                st.session_state["user_data"] = {"user": u, "role": "Owner", "grade": "الكل"}
-                st.rerun()
-            else:
-                users = load_data(USERS_DB)
-                if not users.empty:
-                    hashed_p = hash_password(p)
-                    match = users[(users["user"] == u) & (users["pass"] == hashed_p)]
-                    if not match.empty:
-                        st.session_state["user_data"] = match.iloc[0].to_dict()
-                        st.rerun()
-                    else:
-                        st.error("⚠️ عذراً، البيانات غير صحيحة")
+            if submit:
+                if u == "Hosam" and p == "hosam031007":
+                    st.session_state["user_data"] = {"user": u, "role": "Owner", "grade": "الكل"}
+                    st.query_params["session_token"] = u # حفظ الجلسة التلقائي
+                    st.rerun()
                 else:
-                    st.warning("لا يوجد مستخدمين مسجلين بعد.")
+                    users = load_data(USERS_DB)
+                    if not users.empty:
+                        match = users[(users["user"] == u) & (users["pass"] == hash_password(p))]
+                        if not match.empty:
+                            st.session_state["user_data"] = match.iloc[0].to_dict()
+                            st.query_params["session_token"] = u # حفظ الجلسة التلقائي
+                            st.rerun()
+                        else: st.error("⚠️ عذراً، البيانات غير صحيحة")
+                    else: st.warning("لا يوجد مستخدمين مسجلين بعد.")
     
     with t_sign:
-        st.markdown("### 📋 بيانات الحساب الجديد")
-        nu = st.text_input("1. الاسم الكامل (الرباعي)")
-        
-        col_type, col_grade = st.columns(2)
-        with col_type:
-            nr = st.selectbox("2. أنا:", ["طالب", "أستاذ"])
-        with col_grade:
-            ng = st.selectbox("3. الصف:", list(subs_map.keys())) if nr == "طالب" else "الكل"
-
-        fb = st.text_input("4. رابط حسابك على فيسبوك (مطلوب لتوثيق الحساب 🌐)", placeholder="https://www.facebook.com/...")
-        
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            np = st.text_input("5. كلمة السر", type="password")
-        with col_p2:
-            np2 = st.text_input("6. تأكيد كلمة السر", type="password")
+        st.markdown("### 📋 بيانات الطالب الجديد")
+        nu = st.text_input("الاسم الكامل (الرباعي)")
+        ng = st.selectbox("الصف:", list(subs_map.keys()))
+        fb = st.text_input("رابط حسابك على فيسبوك (للتوثيق 🌐)", placeholder="https://www.facebook.com/...")
+        np = st.text_input("كلمة السر", type="password")
+        np2 = st.text_input("تأكيد كلمة السر", type="password")
             
         if st.button("✅ تأكيد وإنشاء الحساب"):
-            if not nu or not np or not np2 or not fb:
-                st.warning("⚠️ يرجى تعبئة جميع الحقول.")
-            elif np != np2:
-                st.error("⚠️ كلمتا المرور غير متطابقتين. يرجى التأكد!")
-            elif "facebook.com" not in fb.lower() and "fb.com" not in fb.lower():
-                st.error("⚠️ يرجى إدخال رابط فيسبوك صحيح يبدأ بـ facebook.com لضمان توثيق حسابك.")
+            if not nu or not np or not np2 or not fb: st.warning("⚠️ يرجى تعبئة جميع الحقول.")
+            elif np != np2: st.error("⚠️ كلمتا المرور غير متطابقتين.")
+            elif "facebook.com" not in fb.lower() and "fb.com" not in fb.lower(): st.error("⚠️ يرجى إدخال رابط فيسبوك صحيح.")
             else:
                 users = load_data(USERS_DB)
-                if not users.empty and nu in users['user'].values:
-                    st.error("⚠️ الاسم موجود مسبقاً، يرجى كتابة اسمك الثلاثي أو الرباعي.")
+                if not users.empty and nu in users['user'].values: st.error("⚠️ الاسم موجود مسبقاً.")
                 else:
-                    new_user = pd.DataFrame([{
-                        "user": nu, "pass": hash_password(np), "role": nr, "grade": ng, "fb_link": fb
-                    }])
+                    new_user = pd.DataFrame([{"user": nu, "pass": hash_password(np), "role": "طالب", "grade": ng, "fb_link": fb}])
                     pd.concat([users, new_user], ignore_index=True).to_csv(USERS_DB, index=False)
-                    st.success("🎉 تم إنشاء الحساب وتوثيقه بنجاح! يمكنك تسجيل الدخول الآن من التبويب المجاور.")
+                    st.success("🎉 تم إنشاء الحساب! سجل دخولك الآن.")
 
 # ==========================================
-# 5. شاشات المستخدمين حسب الصلاحية
+# 5. شاشات المستخدمين (بعد تسجيل الدخول)
 # ==========================================
 else:
     user = st.session_state["user_data"]
     
-    # ----------------------------------------
-    # القائمة الجانبية (Sidebar)
-    # ----------------------------------------
+    # --- القائمة الجانبية (Sidebar) ---
     with st.sidebar:
         profile_path = f"profiles/{user['user']}.png"
-        
         if os.path.exists(profile_path):
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                st.image(profile_path, use_container_width=True)
-        else:
-            st.markdown("<h1 style='text-align: center; color: #1E88E5;'>👤</h1>", unsafe_allow_html=True)
+            c1, c2, c3 = st.columns([1, 2, 1])
+            c2.image(profile_path, use_container_width=True)
+        else: st.markdown("<h1 style='text-align: center; color: #1E88E5;'>👤</h1>", unsafe_allow_html=True)
             
         st.markdown(f"<h3 style='text-align: center; margin-bottom: 0;'>{user['user']}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align: center; color: gray; font-weight: bold;'>{user['role']}</p>", unsafe_allow_html=True)
-        
-        if user['role'] == "طالب":
-            st.markdown(f"<p style='text-align: center; color: #D32F2F;'>الصف: {user['grade']}</p>", unsafe_allow_html=True)
+        if user['role'] == "طالب": st.markdown(f"<p style='text-align: center; color: #D32F2F;'>الصف: {user['grade']}</p>", unsafe_allow_html=True)
             
         st.divider()
         st.markdown("### 💎 حالة الحساب")
-        if user['role'] == "Owner":
-            st.success("حساب إدارة (VIP) 👑")
+        if user['role'] == "Owner": st.success("حساب إدارة (VIP) 👑")
+        elif user['role'] == "أستاذ": st.info("حساب كادر تدريسي 👨‍🏫")
         else:
             st.info("الخطة الحالية: مجانية 🆓")
-            if st.button("🚀 الترقية لنسخة الـ PRO", use_container_width=True):
-                st.toast("سيتم تفعيل نظام الاشتراكات والدفع قريباً!")
+            if st.button("🚀 الترقية لنسخة الـ PRO", use_container_width=True): st.toast("نظام الاشتراكات قريباً!")
                 
         st.divider()
-        if user['role'] == "طالب":
-            st.markdown("### 🏆 نشاطي")
-            c1, c2 = st.columns(2)
-            c1.metric(label="النقاط", value="150 🌟")
-            c2.metric(label="المستوى", value="مبتدئ")
-            st.divider()
+        st.markdown("### 🤝 دعوة صديق")
+        st.text_input("انسخ الرابط وشاركه:", value="https://sanad.streamlit.app", disabled=True)
+        if st.button("📋 نسخ رابط المنصة"): st.toast("تم النسخ! أرسله لأصدقائك.")
             
-        if st.button("🔴 تسجيل الخروج", use_container_width=True):
+        st.divider()
+        if st.button("🔴 تسجيل الخروج"):
             st.session_state["user_data"] = None
-            st.session_state["chat_history"] = []
-            st.session_state["oral_exam_history"] = []
+            if "session_token" in st.query_params: del st.query_params["session_token"]
             st.rerun()
 
     # ----------------------------------------
@@ -328,245 +238,170 @@ else:
     # ----------------------------------------
     if user["role"] == "Owner":
         st.header(f"👑 لوحة تحكم الإدارة الشاملة - {time_greeting}")
-        t_users, t_files, t_all_grades, t_settings = st.tabs(["👥 إدارة المستخدمين", "📁 إدارة الملفات", "📊 السجلات والدرجات", "⚙️ إعدادات المالك"])
+        t_users, t_teachers, t_files, t_notify, t_settings = st.tabs(["👥 الطلاب", "👨‍🏫 الأساتذة", "📁 الملفات", "📩 رسائل الأساتذة", "⚙️ إعداداتي"])
         
         with t_users:
-            st.markdown('<div class="modern-box">هنا يمكنك عرض جميع الحسابات (بما فيها روابط الفيسبوك)، وتعديلها أو حذفها.</div>', unsafe_allow_html=True)
             u_df = load_data(USERS_DB)
-            del_col, edit_col = st.columns([1, 2])
-            with del_col:
-                user_to_del = st.selectbox("اختر اسم المستخدم للحذف:", [""] + list(u_df['user'].values))
-                if st.button("🗑️ تأكيد الحذف") and user_to_del:
-                    u_df = u_df[u_df['user'] != user_to_del]
-                    u_df.to_csv(USERS_DB, index=False)
-                    st.success(f"تم حذف {user_to_del}")
-                    st.rerun()
-            with edit_col:
-                edited_u = st.data_editor(u_df, num_rows="dynamic", use_container_width=True)
-                if st.button("💾 حفظ تعديلات المستخدمين"):
-                    edited_u.to_csv(USERS_DB, index=False)
-                    st.success("تم الحفظ!")
+            students = u_df[u_df['role'] == 'طالب']
+            st.data_editor(students, num_rows="dynamic", use_container_width=True)
+
+        with t_teachers:
+            st.markdown("### ➕ إضافة أستاذ جديد")
+            col1, col2 = st.columns(2)
+            t_name = col1.text_input("اسم الأستاذ")
+            t_pass = col2.text_input("كلمة مرور الأستاذ", type="password")
+            if st.button("إنشاء حساب الأستاذ"):
+                if t_name and t_pass:
+                    users = load_data(USERS_DB)
+                    if not users.empty and t_name in users['user'].values: st.error("الاسم موجود.")
+                    else:
+                        new_t = pd.DataFrame([{"user": t_name, "pass": hash_password(t_pass), "role": "أستاذ", "grade": "الكل", "fb_link": "معلم"}])
+                        pd.concat([users, new_t], ignore_index=True).to_csv(USERS_DB, index=False)
+                        st.success("تم تفعيل حساب الأستاذ بنجاح!")
+                        st.rerun()
+            st.markdown("---")
+            st.markdown("### سجل الأساتذة")
+            teachers_df = u_df[u_df['role'] == 'أستاذ']
+            st.dataframe(teachers_df, use_container_width=True)
 
         with t_files:
             f_df = load_data(FILES_DB)
-            f_del_col, f_edit_col = st.columns([1, 2])
-            with f_del_col:
-                file_to_del = st.selectbox("اختر الملف للحذف:", [""] + list(f_df['name'].values))
-                if st.button("🗑️ حذف الملف نهائياً") and file_to_del:
-                    file_row = f_df[f_df['name'] == file_to_del].iloc[0]
-                    folder = "lessons" if file_row['type'] == "بحث" else "exams"
-                    target_path = os.path.join(folder, file_to_del)
-                    if os.path.exists(target_path): os.remove(target_path)
-                    f_df = f_df[f_df['name'] != file_to_del]
-                    f_df.to_csv(FILES_DB, index=False)
-                    st.success("تم تدمير الملف!")
+            file_to_del = st.selectbox("اختر الملف للحذف نهائياً:", [""] + list(f_df['name'].values))
+            if st.button("🗑️ حذف الملف") and file_to_del:
+                row = f_df[f_df['name'] == file_to_del].iloc[0]
+                target_path = os.path.join("lessons" if row['type'] == "بحث" else "exams", file_to_del)
+                if os.path.exists(target_path): os.remove(target_path)
+                f_df[f_df['name'] != file_to_del].to_csv(FILES_DB, index=False)
+                st.success("تم الحذف!")
+                st.rerun()
+
+        with t_notify:
+            n_df = load_data(NOTIFY_DB)
+            if not n_df.empty:
+                st.dataframe(n_df, use_container_width=True)
+                if st.button("مسح جميع التنويهات"): 
+                    pd.DataFrame(columns=["sender", "message", "date"]).to_csv(NOTIFY_DB, index=False)
                     st.rerun()
-            with f_edit_col:
-                edited_f = st.data_editor(f_df, num_rows="dynamic", use_container_width=True)
-                if st.button("💾 حفظ تعديلات الملفات"):
-                    edited_f.to_csv(FILES_DB, index=False)
-                    st.success("تم الحفظ!")
-                    
-        with t_all_grades:
-            g_df = load_data(GRADES_DB)
-            edited_g = st.data_editor(g_df, num_rows="dynamic", use_container_width=True)
-            if st.button("💾 حفظ تعديلات الدرجات"):
-                edited_g.to_csv(GRADES_DB, index=False)
-                st.success("تم الحفظ!")
+            else: st.info("لا يوجد رسائل أو تنويهات جديدة من الأساتذة.")
                 
         with t_settings:
-            st.markdown('<div class="modern-box">هنا يمكنك تحديث صورتك الشخصية التي تظهر في القائمة الجانبية.</div>', unsafe_allow_html=True)
-            col_pic, col_emp = st.columns([1, 2])
-            with col_pic:
-                pic = st.file_uploader("ارفع صورتك الشخصية (JPG/PNG)", type=['png', 'jpg', 'jpeg'])
-                if pic and st.button("💾 حفظ وتحديث الصورة"):
-                    img = Image.open(pic)
-                    img.save(f"profiles/{user['user']}.png")
-                    st.success("تم تحديث صورتك بنجاح! ✅")
-                    st.rerun()
+            pic = st.file_uploader("ارفع صورتك الشخصية (JPG/PNG)", type=['png', 'jpg', 'jpeg'])
+            if pic and st.button("💾 حفظ الصورة"):
+                Image.open(pic).save(f"profiles/{user['user']}.png")
+                st.success("تم التحديث!")
+                st.rerun()
 
     # ----------------------------------------
-    # واجهة الأستاذ (الرفع عبر التلغرام)
+    # واجهة الطالب والأستاذ المشتركة 
     # ----------------------------------------
-    elif user["role"] == "أستاذ":
-        st.header(f"👨‍🏫 مركز رفع الدروس - {time_greeting}")
-        st.info("أرسل ملف PDF إلى بوت التلغرام، ثم اضغط 'جلب الملفات' لرفعه للمنصة.")
-        
-        if not BOT_TOKEN:
-            st.warning("⚠️ ميزة التلغرام غير مفعلة. يرجى وضع TELEGRAM_BOT_TOKEN في الـ Secrets.")
+    elif user["role"] in ["طالب", "أستاذ"]:
+        if user["role"] == "أستاذ":
+            st.markdown(f'<div class="modern-box"><div class="welcome-title">👨‍🏫 أهلاً بك أستاذ {user["user"]}</div><div class="programmer-tag">اختر الصف والمادة لاستعراض المنصة أو رفع الدروس</div></div>', unsafe_allow_html=True)
+            col_g, col_s = st.columns(2)
+            view_grade = col_g.selectbox("تصفح كـ صف:", list(subs_map.keys()))
+            sub = col_s.selectbox("المادة:", subs_map[view_grade])
+            tabs = st.tabs(["📤 مركز الرفع", "📚 المكتبة", "🤖 المعلم الذكي", "📸 عدسة الذكاء", "📝 الامتحانات", "📅 المنقذ", "💬 مراسلة الإدارة"])
         else:
-            if st.button("🔄 جلب أحدث الملفات المرسلة للبوت"):
-                with st.spinner("جاري الاتصال..."):
+            st.markdown(f'<div class="modern-box"><div class="welcome-title">{time_greeting} يا بطل!</div><div class="programmer-tag">الصف: {user["grade"]}</div></div>', unsafe_allow_html=True)
+            view_grade = user["grade"]
+            sub = st.selectbox("اختر المادة التي ترغب بدراستها:", subs_map[view_grade])
+            tabs = st.tabs(["📚 المكتبة", "🤖 المعلم الذكي", "📸 عدسة الذكاء", "📝 الامتحانات", "📅 المنقذ", "📊 مستواي"])
+
+        # توزيع التبويبات حسب الصلاحية لتجنب تكرار الكود
+        tab_index = 0
+
+        # -- تاب الرفع (فقط للأستاذ) --
+        if user["role"] == "أستاذ":
+            with tabs[tab_index]:
+                st.info("أرسل ملف PDF إلى بوت التلغرام، ثم اضغط جلب لرفعه لطلاب هذا الصف.")
+                if st.button("🔄 جلب من التلغرام"):
                     updates = get_telegram_updates(BOT_TOKEN)
-                    docs = []
-                    for u in updates:
-                        if "message" in u and "document" in u["message"]:
-                            doc = u["message"]["document"]
-                            if doc.get("mime_type") == "application/pdf":
-                                docs.append({
-                                    "id": doc["file_id"],
-                                    "name": doc.get("file_name", "ملف_بدون_اسم.pdf"),
-                                    "date": datetime.fromtimestamp(u["message"]["date"]).strftime("%Y-%m-%d %H:%M")
-                                })
-                    if docs:
-                        st.session_state["tg_docs"] = docs[-10:]
-                        st.success("تم العثور على ملفات!")
-                    else:
-                        st.warning("لا يوجد ملفات PDF جديدة.")
+                    docs = [{"id": u["message"]["document"]["file_id"], "name": u["message"]["document"].get("file_name", "ملف.pdf"), "date": datetime.fromtimestamp(u["message"]["date"]).strftime("%Y-%m-%d %H:%M")} for u in updates if "message" in u and "document" in u["message"] and u["message"]["document"].get("mime_type") == "application/pdf"]
+                    if docs: st.session_state["tg_docs"] = docs[-10:]; st.success("تم العثور على ملفات!")
+                    else: st.warning("لا يوجد ملفات جديدة.")
+                if st.session_state.get("tg_docs"):
+                    selected_doc = {f"{d['name']} ({d['date']})": d for d in st.session_state["tg_docs"]}[st.selectbox("اختر الملف:", list({f"{d['name']} ({d['date']})": d for d in st.session_state["tg_docs"]}.keys()))]
+                    type_f = st.radio("نوعه:", ["بحث", "نموذج امتحاني"])
+                    if st.button("🚀 رفع الملف للمنصة"):
+                        f_name = f"{type_f}_{sub}_{selected_doc['name'].replace(' ', '_')}"
+                        if download_telegram_file(BOT_TOKEN, selected_doc['id'], os.path.join("lessons" if type_f=="بحث" else "exams", f_name)):
+                            pd.concat([load_data(FILES_DB), pd.DataFrame([{"name": f_name, "grade": view_grade, "sub": sub, "type": type_f, "date": datetime.now().strftime("%Y-%m-%d")}])], ignore_index=True).to_csv(FILES_DB, index=False)
+                            st.success("تم الرفع!")
+            tab_index += 1
 
-            if st.session_state.get("tg_docs"):
-                st.markdown("---")
-                doc_dict = {f"{d['name']} ({d['date']})": d for d in st.session_state["tg_docs"]}
-                selected_doc_name = st.selectbox("اختر الملف لرفعه:", list(doc_dict.keys()))
-                selected_doc = doc_dict[selected_doc_name]
-                
-                c1, c2 = st.columns(2)
-                tg = c1.selectbox("الصف:", list(subs_map.keys()))
-                ts = c2.selectbox("المادة:", subs_map[tg])
-                type_f = st.radio("نوع الملف:", ["بحث", "نموذج امتحاني"])
-                
-                if st.button("🚀 سحب الملف للمنصة"):
-                    f_name = f"{type_f}_{ts}_{selected_doc['name'].replace(' ', '_')}"
-                    folder = "lessons" if type_f == "بحث" else "exams"
-                    dest_path = os.path.join(folder, f_name)
-                    
-                    with st.spinner("جاري السحب..."):
-                        if download_telegram_file(BOT_TOKEN, selected_doc['id'], dest_path):
-                            f_db = load_data(FILES_DB)
-                            new_file = pd.DataFrame([{"name": f_name, "grade": tg, "sub": ts, "type": type_f, "date": datetime.now().strftime("%Y-%m-%d")}])
-                            pd.concat([f_db, new_file], ignore_index=True).to_csv(FILES_DB, index=False)
-                            st.success("تم الرفع بنجاح!")
-                        else:
-                            st.error("فشل السحب.")
-
-    # ----------------------------------------
-    # واجهة الطالب
-    # ----------------------------------------
-    elif user["role"] == "طالب":
-        st.markdown(f"""
-            <div class="modern-box">
-                <div class="welcome-title">{time_greeting} يا بطل! مرحباً بك في منصة سند</div>
-                <div class="programmer-tag">💻 برمجة الأستاذ حسام الأسدي | الصف: {user['grade']}</div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        sub = st.selectbox("اختر المادة التي ترغب بدراستها:", subs_map[user['grade']])
-        
-        t_study, t_ai, t_vision, t_exams, t_plan, t_progress = st.tabs([
-            "📚 المكتبة", 
-            "🤖 المعلم الذكي", 
-            "📸 عدسة الذكاء", 
-            "📝 الامتحانات", 
-            "📅 المنقذ", 
-            "📊 مستواي"
-        ])
-        
-        with t_study:
-            search_q = st.text_input("🔍 ابحث عن اسم درس...")
+        # -- المكتبة --
+        with tabs[tab_index]:
+            search_q = st.text_input("🔍 ابحث عن درس...")
             f_db = load_data(FILES_DB)
             if not f_db.empty:
-                my_f = f_db[(f_db["grade"] == user["grade"]) & (f_db["sub"] == sub)]
+                my_f = f_db[(f_db["grade"] == view_grade) & (f_db["sub"] == sub)]
                 if search_q: my_f = my_f[my_f['name'].str.contains(search_q, case=False)]
-                if my_f.empty: st.info("لا توجد ملفات مرفوعة.")
+                if my_f.empty: st.info("لا توجد ملفات.")
                 else:
                     for _, r in my_f.iterrows():
-                        folder, path = ("lessons" if r['type'] == "بحث" else "exams"), ""
-                        path = os.path.join(folder, r['name'])
+                        path = os.path.join("lessons" if r['type'] == "بحث" else "exams", r['name'])
                         if os.path.exists(path):
-                            with open(path, "rb") as f:
-                                st.download_button(label=f"📥 {r['name'].split('_')[-1]}", data=f, file_name=r['name'], key=r['name'])
+                            with open(path, "rb") as f: st.download_button(f"📥 {r['name'].split('_')[-1]}", f, file_name=r['name'], key=r['name'])
             else: st.info("المكتبة فارغة.")
+        tab_index += 1
 
-        with t_ai:
-            st.subheader("💬 اسأل المعلم الذكي")
-            style = st.radio("كيف ترغب أن يشرح لك المعلم؟", ["شرح علمي عادي", "شرح بالمشرمحي (ابن البلد 🇸🇾)", "ربط بالواقع السوري 🛠️"], horizontal=True)
-            
-            for msg in st.session_state["chat_history"]:
-                with st.chat_message(msg["role"]): st.write(msg["content"])
-            
-            q = st.chat_input("اكتب سؤالك هنا...")
-            if q:
+        # -- المعلم الذكي --
+        with tabs[tab_index]:
+            style = st.radio("طريقة الشرح:", ["علمي", "بالمشرمحي (ابن البلد)", "واقع سوري"], horizontal=True)
+            for msg in st.session_state["chat_history"]: st.chat_message(msg["role"]).write(msg["content"])
+            if q := st.chat_input("اكتب سؤالك..."):
                 st.session_state["chat_history"].append({"role": "user", "content": q})
-                with st.chat_message("user"): st.write(q)
-                
-                with st.spinner("المعلم يجهز الإجابة..."):
-                    ai_prompt = f"أنت معلم خبير في سوريا. أجب عن هذا السؤال لمادة {sub} لصف {user['grade']}: {q}\n"
-                    if style == "شرح بالمشرمحي (ابن البلد 🇸🇾)":
-                        ai_prompt += "المطلوب: اشرح الفكرة باللهجة السورية العامية واستخدم أمثلة من الشارع لتسهيل الفهم."
-                    elif style == "ربط بالواقع السوري 🛠️":
-                        ai_prompt += "المطلوب: اشرح المفهوم بربطه بسيناريوهات من الواقع السوري اليومي لتكون الفكرة منطقية."
-                        
-                    ans = get_ai_response(ai_prompt)
-                
+                st.chat_message("user").write(q)
+                with st.spinner("يجهز الإجابة..."):
+                    pr = f"أنت خبير سوري. أجب لمادة {sub} صف {view_grade}: {q}\n" + ("اشرحها عامية سورية بأمثلة من الشارع" if style=="بالمشرمحي (ابن البلد)" else "اربطها بواقع سوريا اليومي" if style=="واقع سوري" else "")
+                    ans = get_ai_response(pr)
                 st.session_state["chat_history"].append({"role": "assistant", "content": ans})
-                with st.chat_message("assistant"):
-                    st.write(ans)
-                    audio = speak_text(ans)
-                    if audio: st.audio(audio, format="audio/mp3")
+                st.chat_message("assistant").write(ans)
+        tab_index += 1
 
-        with t_vision:
-            st.subheader("📸 عدسة الذكاء الاصطناعي")
-            vision_mode = st.radio("اختر الخدمة:", ["البحث العكسي (كيف أحل هذه المسألة؟)", "المصحح الآلي المقارن (أين خطأي؟)"])
-            img = st.file_uploader("ارفع صورة المسألة أو الحل", type=["jpg", "png", "jpeg"])
-            
-            if img and st.button("🚀 بدء التحليل البصري"):
-                with st.spinner("جاري مسح الصورة وتحليلها..."):
-                    img_opened = Image.open(img)
-                    if vision_mode == "البحث العكسي (كيف أحل هذه المسألة؟)":
-                        v_prompt = f"أنت معلم ذكي لمادة {sub} لصف {user['grade']}. اشرح 'الدرس أو القانون' للمسألة وعلمه 'طريقة الحل' خطوة بخطوة."
-                        res = get_ai_response(v_prompt, img_opened)
+        # -- عدسة الذكاء --
+        with tabs[tab_index]:
+            v_mode = st.radio("الخدمة:", ["شرح مسألة", "تصحيح حل طالب"])
+            if img := st.file_uploader("ارفع الصورة", type=["jpg", "png", "jpeg"]):
+                if st.button("🚀 تحليل"):
+                    with st.spinner("جاري التحليل..."):
+                        res = get_ai_response(f"أنت معلم لمادة {sub} لصف {view_grade}. " + ("اشرح الدرس وطريقة الحل للمسألة في الصورة خطوة بخطوة ولا تعط الجواب فورا." if v_mode=="شرح مسألة" else "صحح الحل بالصورة وحدد الخطأ بدقة كأنك ترسم دائرة حمراء عليه، وأعط درجة من 100."), Image.open(img))
                         st.info(res)
-                    elif vision_mode == "المصحح الآلي المقارن (أين خطأي؟)":
-                        v_prompt = f"أنت مصحح لمادة {sub}. حلل ورقة الطالب وقارنها بالحل النموذجي. حدد الخطأ بدقة واشرح كيف يصححه، وأعطه درجة من 100."
-                        res = get_ai_response(v_prompt, img_opened)
-                        st.info(res)
-                        try:
-                            match = re.search(r'\d+', res)
-                            if match:
-                                score = min(int(match.group()), 100)
-                                pd.concat([load_data(GRADES_DB), pd.DataFrame([{"user": user['user'], "sub": sub, "score": score, "date": datetime.now().strftime("%Y-%m-%d %H:%M")}])], ignore_index=True).to_csv(GRADES_DB, index=False)
-                                st.toast(f"تم تسجيل النتيجة: {score}/100")
-                        except: pass
+        tab_index += 1
 
-        with t_exams:
-            exam_mode = st.radio("اختر نوع الامتحان:", ["📝 نموذج وزاري شامل", "🗣️ تسميع شفهي"])
-            
-            if exam_mode == "📝 نموذج وزاري شامل":
-                if st.button("🎯 توليد نموذج وزاري الآن"):
-                    with st.spinner("جاري صياغة الأسئلة..."):
-                        e_prompt = f"قم بتوليد نموذج امتحاني وزاري شامل لمادة {sub} لصف {user['grade']}. يحاكي النمط الوزاري السوري الحقيقي."
-                        exam_paper = get_ai_response(e_prompt)
-                    st.markdown(f'<div class="modern-box">{exam_paper}</div>', unsafe_allow_html=True)
-                    
-            elif exam_mode == "🗣️ تسميع شفهي":
-                for m in st.session_state["oral_exam_history"]:
-                    with st.chat_message(m["role"]): st.write(m["content"])
-                oral_q = st.chat_input("أدخل إجابتك هنا...")
-                if oral_q:
+        # -- الامتحانات --
+        with tabs[tab_index]:
+            if st.radio("النوع:", ["📝 نموذج شامل", "🗣️ شفهي"]) == "📝 نموذج شامل":
+                if st.button("🎯 توليد وزاري"): st.markdown(f'<div class="modern-box">{get_ai_response(f"ولد نموذج وزاري سوري لمادة {sub} صف {view_grade}.")}</div>', unsafe_allow_html=True)
+            else:
+                for m in st.session_state["oral_exam_history"]: st.chat_message(m["role"]).write(m["content"])
+                if oral_q := st.chat_input("إجابتك..."):
                     st.session_state["oral_exam_history"].append({"role": "user", "content": oral_q})
-                    with st.chat_message("user"): st.write(oral_q)
-                    with st.spinner("يقيّم إجابتك..."):
-                        o_prompt = f"أنت ممتحن شفهي لمادة {sub}. صحح إجابة الطالب: '{oral_q}' علمياً، ثم اطرح سؤالاً جديداً."
-                        o_ans = get_ai_response(o_prompt)
+                    st.chat_message("user").write(oral_q)
+                    with st.spinner("يقيّم..."):
+                        o_ans = get_ai_response(f"صحح إجابة الطالب: '{oral_q}' بمادة {sub}، واطرح سؤال شفهي جديد.")
                     st.session_state["oral_exam_history"].append({"role": "assistant", "content": o_ans})
-                    with st.chat_message("assistant"):
-                        st.write(o_ans)
-                        audio = speak_text(o_ans)
-                        if audio: st.audio(audio, format="audio/mp3")
+                    st.chat_message("assistant").write(o_ans)
+        tab_index += 1
 
-        with t_plan:
-            c_a, c_b = st.columns(2)
-            d = c_a.number_input("أيام للامتحان؟", min_value=1, value=7)
-            h = c_b.slider("ساعات الدراسة يومياً؟", 1, 15, 5)
-            if st.button("توليد خطة الإنقاذ"):
-                with st.spinner("جاري التصميم..."):
-                    plan = get_ai_response(f"جدول دراسي في مادة {sub} لصف {user['grade']} للانتهاء في {d} أيام بـ {h} ساعات.")
-                st.markdown(f'<div class="modern-box">{plan}</div>', unsafe_allow_html=True)
+        # -- المنقذ --
+        with tabs[tab_index]:
+            ca, cb = st.columns(2)
+            if st.button("توليد الخطة"): st.markdown(f'<div class="modern-box">{get_ai_response(f"خطة دراسة {sub} لصف {view_grade} في {ca.number_input("أيام؟",1,value=7)} أيام بـ {cb.slider("ساعات؟",1,15,5)} ساعات يوميا.")}</div>', unsafe_allow_html=True)
+        tab_index += 1
 
-        with t_progress:
-            g_db = load_data(GRADES_DB)
-            my_scores = g_db[(g_db["user"] == user["user"]) & (g_db["sub"] == sub)]
-            if not my_scores.empty:
-                st.line_chart(my_scores.set_index("date")["score"])
-                st.metric("متوسط درجاتك", f"{my_scores['score'].mean():.1f}%")
-            else: st.info("لا درجات مسجلة.")
+        # -- التاب الأخير (مستواي للطالب / مراسلة للإدارة للأستاذ) --
+        with tabs[tab_index]:
+            if user["role"] == "طالب":
+                my_s = load_data(GRADES_DB)
+                my_s = my_s[(my_s["user"] == user["user"]) & (my_s["sub"] == sub)]
+                if not my_s.empty: st.line_chart(my_s.set_index("date")["score"]); st.metric("متوسط درجاتك", f"{my_s['score'].mean():.1f}%")
+                else: st.info("لا درجات مسجلة.")
+            else:
+                st.markdown("### 💬 إرسال تنويه لمالك المنصة")
+                msg = st.text_area("اكتب رسالتك، استفسارك، أو تقريرك هنا:")
+                if st.button("إرسال للإدارة 📩") and msg:
+                    n_db = load_data(NOTIFY_DB)
+                    new_n = pd.DataFrame([{"sender": user["user"], "message": msg, "date": datetime.now().strftime("%Y-%m-%d %H:%M")}])
+                    pd.concat([n_db, new_n], ignore_index=True).to_csv(NOTIFY_DB, index=False)
+                    st.success("تم إرسال رسالتك للأستاذ حسام بنجاح!")
