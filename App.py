@@ -49,11 +49,8 @@ def init_db():
             c.execute('''CREATE TABLE IF NOT EXISTS broadcasts (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, grade TEXT, subject TEXT, message TEXT, date TEXT, FOREIGN KEY(sender) REFERENCES users(user))''')
             c.execute('''CREATE TABLE IF NOT EXISTS rate_limits (username TEXT PRIMARY KEY, attempts INTEGER, lockout_until REAL)''')
             c.execute('''CREATE TABLE IF NOT EXISTS ai_usage (username TEXT PRIMARY KEY, query_count INTEGER, reset_time REAL)''')
-            
-            # الجداول الجديدة للبنك والامتحانات وتتبع المستوى
             c.execute('''CREATE TABLE IF NOT EXISTS question_bank (id INTEGER PRIMARY KEY AUTOINCREMENT, grade TEXT, subject TEXT, chapter TEXT, question TEXT, opt_a TEXT, opt_b TEXT, opt_c TEXT, correct_opt TEXT)''')
             c.execute('''CREATE TABLE IF NOT EXISTS student_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, student_name TEXT, subject TEXT, exam_score INTEGER, date TEXT, FOREIGN KEY(student_name) REFERENCES users(user))''')
-            
             conn.commit()
 
 init_db()
@@ -339,7 +336,6 @@ if st.session_state["user_data"] is None:
                 st.warning("⚠️ يرجى تعبئة الحقول.")
             elif np_pass != np2: 
                 st.error("⚠️ كلمتا المرور غير متطابقتين.")
-            # التحقق الصارم من كلمة المرور عبر Regex
             elif not re.match(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d|.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$", np_pass):
                 st.error("🚨 كلمة المرور ضعيفة جداً! يرجى الالتزام بالشروط المذكورة أعلاه لحماية حسابك.")
             else:
@@ -444,7 +440,7 @@ else:
             if st.button("🔙 العودة للرئيسية", use_container_width=True): st.session_state["current_view"] = "home"; st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # الواجهة المربعة (8 أزرار متناسقة للكل)
+        # الواجهة المربعة المنظمة والتخلص من زر العدسة المنفصل
         if st.session_state["current_view"] == "home":
             if user["role"] == "أستاذ":
                 c1, c2 = st.columns(2)
@@ -454,24 +450,22 @@ else:
                 if c3.button("📚\nالمكتبة"): st.session_state["current_view"] = "library"; st.rerun()
                 if c4.button("📝\nبنك الأسئلة"): st.session_state["current_view"] = "q_bank"; st.rerun()
                 c5, c6 = st.columns(2)
-                if c5.button("🤖\nالمعلم الذكي"): st.session_state["current_view"] = "ai_teacher"; st.rerun()
-                if c6.button("📸\nعدسة الذكاء"): st.session_state["current_view"] = "lens"; st.rerun()
+                if c5.button("🤖\nالمعلم الذكي والعدسة"): st.session_state["current_view"] = "ai_teacher"; st.rerun()
+                if c6.button("🎤\nالتسميع الصوتي"): st.session_state["current_view"] = "voice_exam"; st.rerun()
                 c7, c8 = st.columns(2)
-                if c7.button("🎤\nالتسميع الصوتي"): st.session_state["current_view"] = "voice_exam"; st.rerun()
+                if c7.button("📝\nالامتحانات"): st.session_state["current_view"] = "exams"; st.rerun()
                 if c8.button("📖\nأسئلة الدورات"): st.session_state["current_view"] = "past_papers"; st.rerun()
             else: 
                 c1, c2 = st.columns(2)
                 if c1.button("📚\nالمكتبة"): st.session_state["current_view"] = "library"; st.rerun()
-                if c2.button("🤖\nالمعلم الذكي"): st.session_state["current_view"] = "ai_teacher"; st.rerun()
+                if c2.button("🤖\nالمعلم الذكي والعدسة"): st.session_state["current_view"] = "ai_teacher"; st.rerun()
                 c3, c4 = st.columns(2)
-                if c3.button("📸\nعدسة الذكاء"): st.session_state["current_view"] = "lens"; st.rerun()
-                if c4.button("📝\nالامتحانات"): st.session_state["current_view"] = "exams"; st.rerun()
+                if c3.button("📝\nالامتحانات"): st.session_state["current_view"] = "exams"; st.rerun()
+                if c4.button("🎤\nالتسميع الصوتي"): st.session_state["current_view"] = "voice_exam"; st.rerun()
                 c5, c6 = st.columns(2)
-                if c5.button("🎤\nالتسميع الصوتي"): st.session_state["current_view"] = "voice_exam"; st.rerun()
-                if c6.button("📅\nخطة الدراسة"): st.session_state["current_view"] = "plan"; st.rerun()
-                c7, c8 = st.columns(2)
-                if c7.button("📖\nأسئلة الدورات"): st.session_state["current_view"] = "past_papers"; st.rerun()
-                if c8.button("📊\nمستواي"): st.session_state["current_view"] = "progress"; st.rerun()
+                if c5.button("📅\nخطة الدراسة"): st.session_state["current_view"] = "plan"; st.rerun()
+                if c6.button("📖\nأسئلة الدورات"): st.session_state["current_view"] = "past_papers"; st.rerun()
+                if st.button("📊\nمستواي وتقدمي", use_container_width=True): st.session_state["current_view"] = "progress"; st.rerun()
 
         elif st.session_state["current_view"] == "notify" and user["role"] == "أستاذ":
             msg = st.text_area("الإشعار:")
@@ -504,23 +498,52 @@ else:
                     else:
                         with open(p, "rb") as f: st.download_button(f"📥 {r['name']}", f, file_name=r['name'], key=r['name'])
 
+        # دمج المعلم الذكي مع العدسة
         elif st.session_state["current_view"] == "ai_teacher":
-            st.markdown("### 🤖 المعلم الذكي")
+            st.markdown("### 🤖 المعلم الذكي (نص + صورة)")
             f_df = get_table_df("files", "WHERE grade=? AND sub=? AND type='بحث'", (view_grade, sub))
-            sel = st.selectbox("النوطة:", f_df['name'].tolist()) if not f_df.empty else ""
+            sel = st.selectbox("النوطة المرجعية (اختياري):", ["بدون نوطة"] + f_df['name'].tolist()) if not f_df.empty else "بدون نوطة"
             style = st.radio("طريقة الشرح:", ["علمي صارم", "بالمشرمحي"], horizontal=True)
-            for m in st.session_state["chat_history"]: st.chat_message(m["role"]).write(m["content"])
-            if q := st.chat_input("اسأل..."):
-                st.session_state["chat_history"].append({"role": "user", "content": q}); st.chat_message("user").write(q)
-                with st.spinner("يبحث..."):
-                    ctx = get_best_context_smart(q, os.path.join("lessons", sel)) if sel else ""
+            
+            with st.expander("📸 إرفاق صورة مسألة أو وظيفة (اختياري)"):
+                img_upload = st.file_uploader("التقط أو ارفع صورة ليحللها المعلم:", type=["jpg", "png", "jpeg"], key="chat_img")
+
+            # عرض الدردشة السابقة
+            for m in st.session_state["chat_history"]:
+                with st.chat_message(m["role"]):
+                    st.write(m["content"])
+                    if m.get("image"): st.image(m["image"], width=250)
+
+            if q := st.chat_input("اسأل أو اطلب شرح صورتك..."):
+                user_msg = {"role": "user", "content": q}
+                img_obj = None
+                if img_upload:
+                    img_obj = Image.open(img_upload)
+                    user_msg["image"] = img_obj
+                
+                st.session_state["chat_history"].append(user_msg)
+                
+                with st.chat_message("user"):
+                    st.write(q)
+                    if img_obj: st.image(img_obj, width=250)
+                
+                with st.spinner("المعلم يفكر..."):
+                    ctx = ""
+                    if sel and sel != "بدون نوطة":
+                        ctx = get_best_context_smart(q, os.path.join("lessons", sel))
+                    
                     strict = True if "صارم" in style else False
                     pr = f"أجب لمادة {sub}: {q}" if not strict else q
-                    if "بالمشرمحي" in style: pr += " بالعامية السورية"
-                    ans = get_ai_response(pr, strict_mode=strict, context_text=ctx, username=username_current)
-                st.session_state["chat_history"].append({"role": "assistant", "content": ans}); st.chat_message("assistant").write(ans)
+                    if "بالمشرمحي" in style: pr += " بالعامية السورية وبشكل مبسط جداً"
+                    
+                    if img_obj:
+                        pr = "مرفق صورة لمسألة أو حل. " + pr
+                        
+                    ans = get_ai_response(pr, image=img_obj, strict_mode=strict, context_text=ctx, username=username_current)
+                    
+                st.session_state["chat_history"].append({"role": "assistant", "content": ans})
+                st.chat_message("assistant").write(ans)
 
-        # الميزة 1: بنك الأسئلة للأستاذ
         elif st.session_state["current_view"] == "q_bank" and user["role"] == "أستاذ":
             st.markdown("### 📝 إدارة بنك الأسئلة")
             with st.form("add_q"):
@@ -534,7 +557,6 @@ else:
                     execute_sql("INSERT INTO question_bank (grade, subject, chapter, question, opt_a, opt_b, opt_c, correct_opt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (view_grade, sub, ch, q, o_a, o_b, o_c, corr))
                     st.success("تم الحفظ ببنك الأسئلة!")
 
-        # الميزة 2: الامتحانات المؤتمتة للطالب
         elif st.session_state["current_view"] == "exams" and user["role"] == "طالب":
             st.markdown("### 📝 امتحان مؤتمت")
             q_df = get_table_df("question_bank", "WHERE grade=? AND subject=?", (view_grade, sub))
@@ -560,7 +582,6 @@ else:
                         execute_sql("INSERT INTO student_progress (student_name, subject, exam_score, date) VALUES (?, ?, ?, ?)", (username_current, sub, final_score, datetime.now().strftime("%Y-%m-%d")))
                         st.success(f"نتيجتك: {final_score}% تم حفظها في ملفك الشخصي!")
 
-        # الميزة 3: التسميع الصوتي الحرفي
         elif st.session_state["current_view"] == "voice_exam":
             st.markdown("### 🎤 التسميع الصوتي الدقيق")
             st.info("الذكاء سيقارن تسميعك بنوطة الأستاذ حصراً.")
@@ -577,13 +598,7 @@ else:
                         res = get_ai_response(prompt, audio={"mime_type": "audio/wav", "data": aud.getvalue()}, strict_mode=True, context_text=ctx, username=username_current)
                         st.markdown(f'<div class="modern-box" style="color:white;">{res}</div>', unsafe_allow_html=True)
             except Exception as e:
-                st.warning("⚠️ المايكروفون غير مدعوم على متصفحك الحالي.")
-
-        elif st.session_state["current_view"] == "lens":
-            st.markdown("### 📸 عدسة الذكاء")
-            v_mode = st.radio("الخدمة:", ["شرح مسألة", "تصحيح حلي"])
-            img = st.file_uploader("التقط أو ارفع صورة:", type=["jpg", "png", "jpeg"])
-            if img and st.button("تحليل"): st.info(get_ai_response(f"مادة {sub}. " + ("اشرح الحل" if v_mode=="شرح مسألة" else "صحح الحل وأعط درجة."), image=Image.open(img), strict_mode=True, username=username_current))
+                st.warning("⚠️ المايكروفون غير مدعوم على متصفحك الحالي أو إصدار التطبيق.")
 
         elif st.session_state["current_view"] == "plan" and user["role"] == "طالب":
             st.markdown("### 📅 المولد السحري")
@@ -593,7 +608,6 @@ else:
             if st.button("توليد الخطة"):
                 with st.spinner("يخطط..."): st.markdown(f'<div class="modern-box" style="color:white;">{get_ai_response(f"طالب بكالوريا. باقي {days} يوم، وسأدرس {hours} ساعات مادة {sub}. ولد جدول.", username=username_current)}</div>', unsafe_allow_html=True)
 
-        # الميزة 4: تتبع مستوى الطالب (Dashboard)
         elif st.session_state["current_view"] == "progress" and user["role"] == "طالب":
             st.markdown("### 📊 مستواي وتقدمي")
             prog_df = get_table_df("student_progress", "WHERE student_name=? AND subject=?", (username_current, sub))
@@ -603,9 +617,9 @@ else:
                 st.line_chart(prog_df.set_index('date')['exam_score'])
                 avg = prog_df['exam_score'].mean()
                 st.success(f"متوسط علاماتك: {int(avg)}%")
-                if st.button("نصيحة المعلم الذكي لتحسين مستواي"):
+                if st.button("نصيحة المعلم لتحسين مستواي"):
                     with st.spinner("يحلل مستواك..."):
-                        adv = get_ai_response(f"أنا طالب سوري، متوسط علاماتي بمادة {sub} هو {int(avg)}%. أعطني نصيحة سريعة ومحفزة جداً لتحسين مستواي.", username=username_current)
+                        adv = get_ai_response(f"طالب سوري متوسط علاماته بمادة {sub} هو {int(avg)}%. أعطني نصيحة سريعة ومحفزة جداً.", username=username_current)
                         st.markdown(f'<div class="modern-box" style="color:white;">{adv}</div>', unsafe_allow_html=True)
 
         elif st.session_state["current_view"] == "past_papers":
