@@ -94,7 +94,8 @@ def download_telegram_file(token, file_id, dest_path):
 # ==========================================
 # 2. تهيئة قواعد البيانات والمجلدات
 # ==========================================
-for folder in ['lessons', 'exams', 'db']:
+# ضفنا مجلد profiles لحفظ صور المستخدمين/المالك
+for folder in ['lessons', 'exams', 'db', 'profiles']:
     if not os.path.exists(folder):
         os.makedirs(folder)
 
@@ -106,7 +107,6 @@ def init_db(path, columns):
     if not os.path.exists(path):
         pd.DataFrame(columns=columns).to_csv(path, index=False)
 
-# أضفنا عمود fb_link لقاعدة البيانات
 init_db(USERS_DB, ["user", "pass", "role", "grade", "fb_link"])
 init_db(FILES_DB, ["name", "grade", "sub", "type", "date"])
 init_db(GRADES_DB, ["user", "sub", "score", "date"])
@@ -117,26 +117,34 @@ def load_data(path):
     except:
         return pd.DataFrame()
 
-# تأمين توافقية قاعدة البيانات القديمة مع العمود الجديد
 db_users_check = load_data(USERS_DB)
 if not db_users_check.empty and "fb_link" not in db_users_check.columns:
     db_users_check["fb_link"] = ""
     db_users_check.to_csv(USERS_DB, index=False)
 
 # ==========================================
-# 3. إعدادات الواجهة والتصميم المودرن (بدون تعليق)
+# 3. إعدادات الواجهة والترحيب الزمني
 # ==========================================
 st.set_page_config(page_title="منصة سند التعليمية", layout="wide", page_icon="🎓")
 
-# CSS خفيف جداً ومودرن لا يسبب ثقل في التصفح
+# تحديد وقت الترحيب واللون
+hour = datetime.now().hour
+if 5 <= hour < 12:
+    time_greeting = "صباح الخير ☀️"
+    bg, txt, card_bg, border_c = "#F0F2F6", "#1E1E1E", "#FFFFFF", "#D32F2F"
+elif 12 <= hour < 18:
+    time_greeting = "طاب نهارك 🌤️"
+    bg, txt, card_bg, border_c = "#F0F2F6", "#1E1E1E", "#FFFFFF", "#D32F2F"
+else:
+    time_greeting = "مساء الخير 🌙"
+    bg, txt, card_bg, border_c = "#0E1117", "#FAFAFA", "#1E1E1E", "#FF5252"
+
 st.markdown("""
     <style>
-    /* إخفاء عناصر Streamlit الافتراضية لشكل تطبيق حقيقي */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* تصميم الأزرار المودرن */
     .stButton>button { 
         width: 100%; 
         border-radius: 10px; 
@@ -156,7 +164,6 @@ st.markdown("""
         transform: translateY(0px);
     }
 
-    /* صناديق التنسيق الجمالية */
     .modern-box { 
         padding: 20px; 
         background-color: rgba(30, 136, 229, 0.05); 
@@ -195,12 +202,12 @@ if "oral_exam_history" not in st.session_state:
     st.session_state["oral_exam_history"] = []
 
 # ==========================================
-# 4. شاشة الدخول والتسجيل (المحدثة)
+# 4. شاشة الدخول والتسجيل
 # ==========================================
 if st.session_state["user_data"] is None:
-    st.markdown("""
+    st.markdown(f"""
         <div class="modern-box" style="text-align: center;">
-            <div class="welcome-title">مرحباً في منصة سند التعليمية</div>
+            <div class="welcome-title">{time_greeting}، مرحباً في منصة سند التعليمية</div>
             <div class="programmer-tag">💻 برمجة الأستاذ حسام الأسدي</div>
         </div>
     """, unsafe_allow_html=True)
@@ -274,24 +281,57 @@ if st.session_state["user_data"] is None:
 else:
     user = st.session_state["user_data"]
     
-    st.sidebar.markdown(f"### 👋 أهلاً {user['user']}")
-    st.sidebar.markdown(f"**الصلاحية:** {user['role']}")
-    st.sidebar.markdown("---")
-    if st.sidebar.button("🔴 تسجيل الخروج"):
-        st.session_state["user_data"] = None
-        st.session_state["chat_history"] = []
-        st.session_state["oral_exam_history"] = []
-        st.rerun()
+    # ----------------------------------------
+    # القائمة الجانبية (Sidebar)
+    # ----------------------------------------
+    with st.sidebar:
+        profile_path = f"profiles/{user['user']}.png"
+        
+        if os.path.exists(profile_path):
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.image(profile_path, use_container_width=True)
+        else:
+            st.markdown("<h1 style='text-align: center; color: #1E88E5;'>👤</h1>", unsafe_allow_html=True)
+            
+        st.markdown(f"<h3 style='text-align: center; margin-bottom: 0;'>{user['user']}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; color: gray; font-weight: bold;'>{user['role']}</p>", unsafe_allow_html=True)
+        
+        if user['role'] == "طالب":
+            st.markdown(f"<p style='text-align: center; color: #D32F2F;'>الصف: {user['grade']}</p>", unsafe_allow_html=True)
+            
+        st.divider()
+        st.markdown("### 💎 حالة الحساب")
+        if user['role'] == "Owner":
+            st.success("حساب إدارة (VIP) 👑")
+        else:
+            st.info("الخطة الحالية: مجانية 🆓")
+            if st.button("🚀 الترقية لنسخة الـ PRO", use_container_width=True):
+                st.toast("سيتم تفعيل نظام الاشتراكات والدفع قريباً!")
+                
+        st.divider()
+        if user['role'] == "طالب":
+            st.markdown("### 🏆 نشاطي")
+            c1, c2 = st.columns(2)
+            c1.metric(label="النقاط", value="150 🌟")
+            c2.metric(label="المستوى", value="مبتدئ")
+            st.divider()
+            
+        if st.button("🔴 تسجيل الخروج", use_container_width=True):
+            st.session_state["user_data"] = None
+            st.session_state["chat_history"] = []
+            st.session_state["oral_exam_history"] = []
+            st.rerun()
 
     # ----------------------------------------
     # واجهة الإدارة (Owner Dashboard)
     # ----------------------------------------
     if user["role"] == "Owner":
-        st.header("👑 لوحة تحكم الإدارة الشاملة")
-        t_users, t_files, t_all_grades = st.tabs(["👥 إدارة المستخدمين", "📁 إدارة الملفات", "📊 السجلات والدرجات"])
+        st.header(f"👑 لوحة تحكم الإدارة الشاملة - {time_greeting}")
+        t_users, t_files, t_all_grades, t_settings = st.tabs(["👥 إدارة المستخدمين", "📁 إدارة الملفات", "📊 السجلات والدرجات", "⚙️ إعدادات المالك"])
         
         with t_users:
-            st.markdown('<div class="modern-box">هنا يمكنك عرض جميع الحسابات (بما فيها روابط الفيسبوك للتوثيق)، وتعديلها أو حذفها.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="modern-box">هنا يمكنك عرض جميع الحسابات (بما فيها روابط الفيسبوك)، وتعديلها أو حذفها.</div>', unsafe_allow_html=True)
             u_df = load_data(USERS_DB)
             del_col, edit_col = st.columns([1, 2])
             with del_col:
@@ -333,12 +373,23 @@ else:
             if st.button("💾 حفظ تعديلات الدرجات"):
                 edited_g.to_csv(GRADES_DB, index=False)
                 st.success("تم الحفظ!")
+                
+        with t_settings:
+            st.markdown('<div class="modern-box">هنا يمكنك تحديث صورتك الشخصية التي تظهر في القائمة الجانبية.</div>', unsafe_allow_html=True)
+            col_pic, col_emp = st.columns([1, 2])
+            with col_pic:
+                pic = st.file_uploader("ارفع صورتك الشخصية (JPG/PNG)", type=['png', 'jpg', 'jpeg'])
+                if pic and st.button("💾 حفظ وتحديث الصورة"):
+                    img = Image.open(pic)
+                    img.save(f"profiles/{user['user']}.png")
+                    st.success("تم تحديث صورتك بنجاح! ✅")
+                    st.rerun()
 
     # ----------------------------------------
     # واجهة الأستاذ (الرفع عبر التلغرام)
     # ----------------------------------------
     elif user["role"] == "أستاذ":
-        st.header("👨‍🏫 مركز رفع الدروس (عبر التلغرام)")
+        st.header(f"👨‍🏫 مركز رفع الدروس - {time_greeting}")
         st.info("أرسل ملف PDF إلى بوت التلغرام، ثم اضغط 'جلب الملفات' لرفعه للمنصة.")
         
         if not BOT_TOKEN:
@@ -394,7 +445,7 @@ else:
     elif user["role"] == "طالب":
         st.markdown(f"""
             <div class="modern-box">
-                <div class="welcome-title">مرحباً يا بطل في منصة سند التعليمية</div>
+                <div class="welcome-title">{time_greeting} يا بطل! مرحباً بك في منصة سند</div>
                 <div class="programmer-tag">💻 برمجة الأستاذ حسام الأسدي | الصف: {user['grade']}</div>
             </div>
         """, unsafe_allow_html=True)
