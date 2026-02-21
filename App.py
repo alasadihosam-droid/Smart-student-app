@@ -33,7 +33,7 @@ def get_ai_response(prompt, image=None):
         safe_models = [m for m in available_models if "2.5" not in m]
         
         if not safe_models:
-            return "⚠️ عذراً، جميع الموديلات المتاحة في حسابك غير مجانية أو محجوبة. تأكد من إعدادات حسابك."
+            return "⚠️ عذراً، جميع الموديلات المتاحة في حسابك غير مجانية. تأكد من الإعدادات."
 
         for model_name in safe_models:
             try:
@@ -46,7 +46,7 @@ def get_ai_response(prompt, image=None):
             except Exception:
                 continue 
                 
-        return "⚠️ تم رفض الاتصال من جوجل (نفاذ الرصيد أو حظر جغرافي). جرب تشغيل VPN."
+        return "⚠️ تم رفض الاتصال. جرب تشغيل VPN."
     except Exception as e:
         return f"⚠️ خطأ عام في الاتصال: {str(e)}"
 
@@ -106,7 +106,8 @@ def init_db(path, columns):
     if not os.path.exists(path):
         pd.DataFrame(columns=columns).to_csv(path, index=False)
 
-init_db(USERS_DB, ["user", "pass", "role", "grade"])
+# أضفنا عمود fb_link لقاعدة البيانات
+init_db(USERS_DB, ["user", "pass", "role", "grade", "fb_link"])
 init_db(FILES_DB, ["name", "grade", "sub", "type", "date"])
 init_db(GRADES_DB, ["user", "sub", "score", "date"])
 
@@ -116,83 +117,67 @@ def load_data(path):
     except:
         return pd.DataFrame()
 
+# تأمين توافقية قاعدة البيانات القديمة مع العمود الجديد
+db_users_check = load_data(USERS_DB)
+if not db_users_check.empty and "fb_link" not in db_users_check.columns:
+    db_users_check["fb_link"] = ""
+    db_users_check.to_csv(USERS_DB, index=False)
+
 # ==========================================
-# 3. إعدادات الواجهة والتصميم المحسن للموبايل
+# 3. إعدادات الواجهة والتصميم المودرن (بدون تعليق)
 # ==========================================
 st.set_page_config(page_title="منصة سند التعليمية", layout="wide", page_icon="🎓")
 
-# تحسين الألوان وتخفيف الـ CSS لمنع التعليق
-hour = datetime.now().hour
-if 5 <= hour < 18:
-    bg, txt, card_bg, border_c = "#F0F2F6", "#1E1E1E", "#FFFFFF", "#D32F2F"
-else:
-    bg, txt, card_bg, border_c = "#0E1117", "#FAFAFA", "#1E1E1E", "#FF5252"
-
-st.markdown(f"""
+# CSS خفيف جداً ومودرن لا يسبب ثقل في التصفح
+st.markdown("""
     <style>
-    /* تسريع الرندر وتخفيف الحمل على الموبايل */
-    .stApp {{ 
-        background-color: {bg}; 
-        color: {txt} !important; 
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }}
-    
-    /* فرض لون الخط على كل النصوص */
-    p, h1, h2, h3, h4, h5, h6, span, div {{
-        color: {txt} !important;
-    }}
-    
-    .stButton>button {{ 
+    /* إخفاء عناصر Streamlit الافتراضية لشكل تطبيق حقيقي */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* تصميم الأزرار المودرن */
+    .stButton>button { 
         width: 100%; 
-        border-radius: 8px; 
-        background-color: {border_c}; 
-        color: white !important; 
+        border-radius: 10px; 
+        background: linear-gradient(135deg, #1E88E5, #1565C0); 
+        color: white; 
         font-weight: bold; 
         border: none;
-        transition: 0.2s;
-    }}
-    .stButton>button:active {{
-        transform: scale(0.98);
-    }}
-    
-    /* صندوق الترحيب الجديد */
-    .greeting-box {{ 
-        padding: 15px; 
-        background-color: {card_bg}; 
-        border-radius: 10px; 
-        border-bottom: 3px solid {border_c}; 
-        text-align: center; 
-        margin-bottom: 20px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }}
-    
-    .greeting-title {{
-        font-size: 1.8rem;
-        font-weight: bold;
-        margin-bottom: 5px;
-        color: {txt} !important;
-    }}
-    
-    .greeting-subtitle {{
-        font-size: 1rem;
-        color: {txt} !important;
-        opacity: 0.8;
-    }}
-    
-    .programmer-tag {{
-        font-size: 0.85rem;
-        color: {border_c} !important;
-        font-weight: bold;
-        margin-top: 10px;
-    }}
+        padding: 0.6rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+    }
+    .stButton>button:active {
+        transform: translateY(0px);
+    }
 
-    .admin-card, .exam-box {{
-        padding: 15px; 
-        background-color: {card_bg}; 
-        border-left: 4px solid {border_c}; 
-        border-radius: 5px; 
-        margin-bottom: 15px;
-    }}
+    /* صناديق التنسيق الجمالية */
+    .modern-box { 
+        padding: 20px; 
+        background-color: rgba(30, 136, 229, 0.05); 
+        border-radius: 15px; 
+        border-right: 4px solid #1E88E5; 
+        margin-bottom: 20px;
+    }
+    .welcome-title {
+        font-size: 2rem;
+        font-weight: 800;
+        text-align: center;
+        margin-bottom: 0px;
+        color: #1E88E5;
+    }
+    .programmer-tag {
+        font-size: 0.9rem;
+        text-align: center;
+        font-weight: 600;
+        opacity: 0.7;
+        margin-top: 5px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -210,26 +195,27 @@ if "oral_exam_history" not in st.session_state:
     st.session_state["oral_exam_history"] = []
 
 # ==========================================
-# 4. شاشة الدخول والتسجيل
+# 4. شاشة الدخول والتسجيل (المحدثة)
 # ==========================================
 if st.session_state["user_data"] is None:
-    st.markdown(f"""
-        <div class="greeting-box">
-            <div class="greeting-title">مرحباً في منصة سند التعليمية</div>
+    st.markdown("""
+        <div class="modern-box" style="text-align: center;">
+            <div class="welcome-title">مرحباً في منصة سند التعليمية</div>
             <div class="programmer-tag">💻 برمجة الأستاذ حسام الأسدي</div>
         </div>
     """, unsafe_allow_html=True)
     
-    t_log, t_sign = st.tabs(["🔐 تسجيل الدخول", "📝 إنشاء حساب"])
+    t_log, t_sign = st.tabs(["🔐 تسجيل الدخول", "📝 إنشاء حساب موثق"])
     
     with t_log:
+        st.markdown("### 🔑 تسجيل الدخول")
         login_col1, login_col2 = st.columns([1, 1])
         with login_col1:
-            u = st.text_input("اسم المستخدم", key="login_u")
+            u = st.text_input("الاسم الكامل", key="login_u")
         with login_col2:
             p = st.text_input("كلمة المرور", type="password", key="login_p")
             
-        if st.button("دخول المنصة"):
+        if st.button("دخول المنصة 🚀"):
             if u == "Hosam" and p == "hosam031007":
                 st.session_state["user_data"] = {"user": u, "role": "Owner", "grade": "الكل"}
                 st.rerun()
@@ -242,32 +228,45 @@ if st.session_state["user_data"] is None:
                         st.session_state["user_data"] = match.iloc[0].to_dict()
                         st.rerun()
                     else:
-                        st.error("عذراً، البيانات غير صحيحة")
+                        st.error("⚠️ عذراً، البيانات غير صحيحة")
                 else:
                     st.warning("لا يوجد مستخدمين مسجلين بعد.")
     
     with t_sign:
-        sign_col1, sign_col2 = st.columns([1, 1])
-        with sign_col1:
-            nu = st.text_input("الاسم الكامل")
-            nr = st.selectbox("أنا:", ["طالب", "أستاذ"])
-        with sign_col2:
-            np = st.text_input("كلمة السر", type="password")
-            ng = st.selectbox("الصف:", list(subs_map.keys())) if nr == "طالب" else "الكل"
+        st.markdown("### 📋 بيانات الحساب الجديد")
+        nu = st.text_input("1. الاسم الكامل (الرباعي)")
+        
+        col_type, col_grade = st.columns(2)
+        with col_type:
+            nr = st.selectbox("2. أنا:", ["طالب", "أستاذ"])
+        with col_grade:
+            ng = st.selectbox("3. الصف:", list(subs_map.keys())) if nr == "طالب" else "الكل"
+
+        fb = st.text_input("4. رابط حسابك على فيسبوك (مطلوب لتوثيق الحساب 🌐)", placeholder="https://www.facebook.com/...")
+        
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            np = st.text_input("5. كلمة السر", type="password")
+        with col_p2:
+            np2 = st.text_input("6. تأكيد كلمة السر", type="password")
             
-        if st.button("تأكيد إنشاء الحساب"):
-            if nu and np:
+        if st.button("✅ تأكيد وإنشاء الحساب"):
+            if not nu or not np or not np2 or not fb:
+                st.warning("⚠️ يرجى تعبئة جميع الحقول.")
+            elif np != np2:
+                st.error("⚠️ كلمتا المرور غير متطابقتين. يرجى التأكد!")
+            elif "facebook.com" not in fb.lower() and "fb.com" not in fb.lower():
+                st.error("⚠️ يرجى إدخال رابط فيسبوك صحيح يبدأ بـ facebook.com لضمان توثيق حسابك.")
+            else:
                 users = load_data(USERS_DB)
                 if not users.empty and nu in users['user'].values:
-                    st.error("الاسم موجود مسبقاً، يرجى اختيار اسم آخر.")
+                    st.error("⚠️ الاسم موجود مسبقاً، يرجى كتابة اسمك الثلاثي أو الرباعي.")
                 else:
                     new_user = pd.DataFrame([{
-                        "user": nu, "pass": hash_password(np), "role": nr, "grade": ng
+                        "user": nu, "pass": hash_password(np), "role": nr, "grade": ng, "fb_link": fb
                     }])
                     pd.concat([users, new_user], ignore_index=True).to_csv(USERS_DB, index=False)
-                    st.success("تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن.")
-            else:
-                st.warning("يرجى تعبئة جميع الحقول.")
+                    st.success("🎉 تم إنشاء الحساب وتوثيقه بنجاح! يمكنك تسجيل الدخول الآن من التبويب المجاور.")
 
 # ==========================================
 # 5. شاشات المستخدمين حسب الصلاحية
@@ -292,7 +291,7 @@ else:
         t_users, t_files, t_all_grades = st.tabs(["👥 إدارة المستخدمين", "📁 إدارة الملفات", "📊 السجلات والدرجات"])
         
         with t_users:
-            st.markdown('<div class="admin-card">هنا يمكنك عرض جميع الحسابات، وتعديل بياناتها، أو حذف أي مستخدم نهائياً.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="modern-box">هنا يمكنك عرض جميع الحسابات (بما فيها روابط الفيسبوك للتوثيق)، وتعديلها أو حذفها.</div>', unsafe_allow_html=True)
             u_df = load_data(USERS_DB)
             del_col, edit_col = st.columns([1, 2])
             with del_col:
@@ -309,7 +308,6 @@ else:
                     st.success("تم الحفظ!")
 
         with t_files:
-            st.markdown('<div class="admin-card">لحذف ملف بالكامل (من قاعدة البيانات ومن السيرفر).</div>', unsafe_allow_html=True)
             f_df = load_data(FILES_DB)
             f_del_col, f_edit_col = st.columns([1, 2])
             with f_del_col:
@@ -372,7 +370,7 @@ else:
                 selected_doc = doc_dict[selected_doc_name]
                 
                 c1, c2 = st.columns(2)
-                tg = c1.selectbox("الصاف:", list(subs_map.keys()))
+                tg = c1.selectbox("الصف:", list(subs_map.keys()))
                 ts = c2.selectbox("المادة:", subs_map[tg])
                 type_f = st.radio("نوع الملف:", ["بحث", "نموذج امتحاني"])
                 
@@ -395,10 +393,9 @@ else:
     # ----------------------------------------
     elif user["role"] == "طالب":
         st.markdown(f"""
-            <div class="greeting-box">
-                <div class="greeting-title">مرحباً في منصة سند التعليمية</div>
-                <div class="greeting-subtitle">أهلاً بك يا بطل | الصف: {user['grade']}</div>
-                <div class="programmer-tag">💻 برمجة الأستاذ حسام الأسدي</div>
+            <div class="modern-box">
+                <div class="welcome-title">مرحباً يا بطل في منصة سند التعليمية</div>
+                <div class="programmer-tag">💻 برمجة الأستاذ حسام الأسدي | الصف: {user['grade']}</div>
             </div>
         """, unsafe_allow_html=True)
         
@@ -413,7 +410,6 @@ else:
             "📊 مستواي"
         ])
         
-        # 1. المكتبة
         with t_study:
             search_q = st.text_input("🔍 ابحث عن اسم درس...")
             f_db = load_data(FILES_DB)
@@ -430,7 +426,6 @@ else:
                                 st.download_button(label=f"📥 {r['name'].split('_')[-1]}", data=f, file_name=r['name'], key=r['name'])
             else: st.info("المكتبة فارغة.")
 
-        # 2. المعلم الذكي (ابن البلد)
         with t_ai:
             st.subheader("💬 اسأل المعلم الذكي")
             style = st.radio("كيف ترغب أن يشرح لك المعلم؟", ["شرح علمي عادي", "شرح بالمشرمحي (ابن البلد 🇸🇾)", "ربط بالواقع السوري 🛠️"], horizontal=True)
@@ -458,7 +453,6 @@ else:
                     audio = speak_text(ans)
                     if audio: st.audio(audio, format="audio/mp3")
 
-        # 3. عدسة الذكاء الاصطناعي
         with t_vision:
             st.subheader("📸 عدسة الذكاء الاصطناعي")
             vision_mode = st.radio("اختر الخدمة:", ["البحث العكسي (كيف أحل هذه المسألة؟)", "المصحح الآلي المقارن (أين خطأي؟)"])
@@ -483,7 +477,6 @@ else:
                                 st.toast(f"تم تسجيل النتيجة: {score}/100")
                         except: pass
 
-        # 4. محاكي الامتحانات
         with t_exams:
             exam_mode = st.radio("اختر نوع الامتحان:", ["📝 نموذج وزاري شامل", "🗣️ تسميع شفهي"])
             
@@ -492,7 +485,7 @@ else:
                     with st.spinner("جاري صياغة الأسئلة..."):
                         e_prompt = f"قم بتوليد نموذج امتحاني وزاري شامل لمادة {sub} لصف {user['grade']}. يحاكي النمط الوزاري السوري الحقيقي."
                         exam_paper = get_ai_response(e_prompt)
-                    st.markdown(f'<div class="exam-box">{exam_paper}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="modern-box">{exam_paper}</div>', unsafe_allow_html=True)
                     
             elif exam_mode == "🗣️ تسميع شفهي":
                 for m in st.session_state["oral_exam_history"]:
@@ -510,7 +503,6 @@ else:
                         audio = speak_text(o_ans)
                         if audio: st.audio(audio, format="audio/mp3")
 
-        # 5. المنقذ
         with t_plan:
             c_a, c_b = st.columns(2)
             d = c_a.number_input("أيام للامتحان؟", min_value=1, value=7)
@@ -518,9 +510,8 @@ else:
             if st.button("توليد خطة الإنقاذ"):
                 with st.spinner("جاري التصميم..."):
                     plan = get_ai_response(f"جدول دراسي في مادة {sub} لصف {user['grade']} للانتهاء في {d} أيام بـ {h} ساعات.")
-                st.markdown(f'<div class="exam-box">{plan}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="modern-box">{plan}</div>', unsafe_allow_html=True)
 
-        # 6. مستواي
         with t_progress:
             g_db = load_data(GRADES_DB)
             my_scores = g_db[(g_db["user"] == user["user"]) & (g_db["sub"] == sub)]
