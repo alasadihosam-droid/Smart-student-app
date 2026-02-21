@@ -7,7 +7,7 @@ from datetime import datetime
 from gtts import gTTS
 import io
 import hashlib
-import random # لإضافة الأكواد العشوائية
+import random
 import re
 
 # ==========================================
@@ -31,7 +31,6 @@ def get_ai_response(prompt, image=None, strict_mode=False):
         safe_models = [m for m in available_models if "2.5" not in m]
         if not safe_models: return "⚠️ عذراً، جميع الموديلات المتاحة في حسابك غير مجانية."
         
-        # تقييد الذكاء الاصطناعي للمنهاج السوري حصراً
         system_instruction = ""
         if strict_mode:
             system_instruction = "تعليمات صارمة: أنت معلم سوري. التزم حصراً بالمعلومات الموجودة في المنهاج السوري، سلالم التصحيح، والنماذج المرفوعة. لا تقم بإضافة أي معلومات خارجية من الإنترنت. إذا كان السؤال خارج المنهاج قل 'هذا السؤال خارج المنهاج المقرر'."
@@ -69,8 +68,8 @@ FILES_DB = "db/files.csv"
 GRADES_DB = "db/grades.csv"
 NOTIFY_DB = "db/notifications.csv" 
 TEACHER_SUBJECTS_DB = "db/teacher_subjects.csv" 
-CODES_DB = "db/codes.csv" # قاعدة بيانات أكواد التفعيل
-BROADCAST_DB = "db/broadcasts.csv" # قاعدة التنبيهات من الأساتذة للطلاب
+CODES_DB = "db/codes.csv" 
+BROADCAST_DB = "db/broadcasts.csv" 
 
 def init_db(path, columns):
     if not os.path.exists(path): pd.DataFrame(columns=columns).to_csv(path, index=False)
@@ -87,7 +86,6 @@ def load_data(path):
     try: return pd.read_csv(path)
     except: return pd.DataFrame()
 
-# تأمين التوافقية مع قواعد البيانات القديمة
 db_users_check = load_data(USERS_DB)
 if not db_users_check.empty:
     changed = False
@@ -105,7 +103,7 @@ if not db_files_check.empty:
     if changed: db_files_check.to_csv(FILES_DB, index=False)
 
 # ==========================================
-# 3. إعدادات الواجهة والترحيب الزمني 
+# 3. إعدادات الواجهة والترحيب الزمني (مع حل التعليق)
 # ==========================================
 st.set_page_config(page_title="منصة سند التعليمية", layout="wide", page_icon="🎓")
 
@@ -114,9 +112,17 @@ if 5 <= hour < 12: time_greeting = "صباح الخير ☀️"
 elif 12 <= hour < 18: time_greeting = "طاب نهارك 🌤️"
 else: time_greeting = "مساء الخير 🌙"
 
+# حل مشكلة التعليق والتجميد في الموبايل عبر الـ CSS
 st.markdown("""
     <style>
     #MainMenu, footer, header {visibility: hidden;}
+    /* منع التعليق أثناء التمرير على الموبايل */
+    html, body, [class*="st-"] {
+        scroll-behavior: smooth;
+        overscroll-behavior-y: none;
+    }
+    .stApp { overflow-x: hidden; }
+    
     .stButton>button { 
         width: 100%; border-radius: 8px; background: #1E88E5; color: white; 
         font-weight: bold; border: none; padding: 0.5rem; transition: 0.2s;
@@ -150,17 +156,18 @@ if "chat_history" not in st.session_state: st.session_state["chat_history"] = []
 if "oral_exam_history" not in st.session_state: st.session_state["oral_exam_history"] = []
 
 # ==========================================
-# نظام تسجيل الدخول التلقائي (حفظ الجلسة)
+# نظام تسجيل الدخول التلقائي (محسن لمنع الخروج عند التحديث)
 # ==========================================
 if st.session_state["user_data"] is None and "session_token" in st.query_params:
-    token = st.query_params["session_token"]
+    token = st.query_params.get("session_token")
     if token == "Hosam":
         st.session_state["user_data"] = {"user": "Hosam", "role": "Owner", "grade": "الكل", "is_new": False, "is_premium": True}
-    else:
+    elif token:
         users = load_data(USERS_DB)
-        match = users[users["user"] == token]
-        if not match.empty:
-            st.session_state["user_data"] = match.iloc[0].to_dict()
+        if not users.empty:
+            match = users[users["user"] == token]
+            if not match.empty:
+                st.session_state["user_data"] = match.iloc[0].to_dict()
 
 # ==========================================
 # 4. شاشة الدخول والتسجيل
@@ -219,7 +226,6 @@ if st.session_state["user_data"] is None:
 else:
     user = st.session_state["user_data"]
     
-    # --- معالجة الدخول الأول للأستاذ ---
     if user["role"] == "أستاذ" and user.get("is_new", True):
         st.markdown(f'<div class="modern-box"><div class="welcome-title">أهلاً وسهلاً بك يا أستاذنا الفاضل 👨‍🏫</div></div>', unsafe_allow_html=True)
         st.info("لتكتمل إعدادات حسابك، يرجى اختيار الصف والمادة التي تدرسها لترتبط ملفاتك بها مباشرة.")
@@ -227,9 +233,7 @@ else:
         col_g, col_s = st.columns(2)
         sel_grade = col_g.selectbox("الصف الذي تدرسه:", list(subs_map.keys()) + ["كل الصفوف"])
         
-        # تحديد المادة بناءً على الاختيار
         if sel_grade == "كل الصفوف":
-            # جمع كل المواد بدون تكرار
             all_subs = list(set([item for sublist in subs_map.values() for item in sublist]))
             sel_sub = col_s.selectbox("مادتك الاختصاصية:", all_subs)
         else:
@@ -252,7 +256,6 @@ else:
             st.rerun()
         st.stop() 
     
-    # --- استرجاع مادة الأستاذ ---
     teacher_grade, teacher_sub = "", ""
     if user["role"] == "أستاذ":
         ts_db = load_data(TEACHER_SUBJECTS_DB)
@@ -261,7 +264,7 @@ else:
             teacher_grade = t_match.iloc[0]["grade"]
             teacher_sub = t_match.iloc[0]["subject"]
 
-    # --- القائمة الجانبية (Sidebar) ---
+    # --- القائمة الجانبية ---
     with st.sidebar:
         profile_path = f"profiles/{user['user']}.png"
         if os.path.exists(profile_path):
@@ -288,14 +291,13 @@ else:
                     code_input = st.text_input("أدخل كود التفعيل (5 أرقام):")
                     if st.form_submit_button("تفعيل الاشتراك 🚀"):
                         codes_df = load_data(CODES_DB)
-                        if not codes_df.empty:
+                        if not codes_df.empty and code_input.isdigit():
                             match_code = codes_df[(codes_df['code'] == int(code_input)) & (codes_df['is_used'] == False)]
                             if not match_code.empty:
-                                # تفعيل الكود
                                 codes_df.loc[codes_df['code'] == int(code_input), 'is_used'] = True
                                 codes_df.loc[codes_df['code'] == int(code_input), 'used_by'] = user['user']
                                 codes_df.to_csv(CODES_DB, index=False)
-                                # ترقية الطالب
+                                
                                 users_df = load_data(USERS_DB)
                                 users_df.loc[users_df['user'] == user['user'], 'is_premium'] = True
                                 users_df.to_csv(USERS_DB, index=False)
@@ -303,7 +305,7 @@ else:
                                 st.success("تم تفعيل حسابك بنجاح لسنة كاملة! 🎉")
                                 st.rerun()
                             else: st.error("الكود غير صحيح أو مستخدم مسبقاً.")
-                        else: st.error("لا توجد أكواد في النظام.")
+                        else: st.error("الرجاء إدخال أرقام صحيحة.")
                 
         st.divider()
         st.markdown("### 🤝 دعوة للمنصة")
@@ -312,7 +314,8 @@ else:
         st.divider()
         if st.button("🔴 تسجيل الخروج"):
             st.session_state["user_data"] = None
-            if "session_token" in st.query_params: del st.query_params["session_token"]
+            if "session_token" in st.query_params:
+                del st.query_params["session_token"]
             st.rerun()
 
     # ----------------------------------------
@@ -346,12 +349,16 @@ else:
             teachers_df = u_df[u_df['role'] == 'أستاذ']
             st.dataframe(teachers_df, use_container_width=True)
             
-            # إحصائيات دعوات الأساتذة
+            # تم إصلاح الخطأ المطبعي هنا (value_counts بدلاً من value_form)
             st.markdown("### 📊 إحصائيات دعوات الأساتذة للطلاب")
-            invite_counts = students['invited_by'].value_form().reset_index()
-            invite_counts.columns = ['اسم الأستاذ', 'عدد الطلاب المدعوين']
-            invite_counts = invite_counts[invite_counts['اسم الأستاذ'] != ""]
-            st.dataframe(invite_counts, use_container_width=True)
+            if 'invited_by' in students.columns and not students.empty:
+                invite_counts = students['invited_by'].value_counts().reset_index()
+                invite_counts.columns = ['اسم الأستاذ', 'عدد الطلاب المدعوين']
+                invite_counts = invite_counts[invite_counts['اسم الأستاذ'] != ""]
+                if not invite_counts.empty:
+                    st.dataframe(invite_counts, use_container_width=True)
+                else:
+                    st.info("لم يقم أحد بالتسجيل عبر دعوة أستاذ حتى الآن.")
 
         with t_files:
             f_df = load_data(FILES_DB)
@@ -403,7 +410,6 @@ else:
         if user["role"] == "أستاذ":
             st.markdown(f'<div class="modern-box"><div class="welcome-title">👨‍🏫 أهلاً بك أستاذ {user["user"]}</div><div class="programmer-tag">{teacher_sub} - {teacher_grade}</div></div>', unsafe_allow_html=True)
             
-            # السماح للأستاذ بالتنقل بين الصفوف إذا كان "كل الصفوف"
             if teacher_grade == "كل الصفوف":
                 view_grade = st.selectbox("اختر الصف للعمل عليه الآن:", ["التاسع", "البكالوريا العلمي", "البكالوريا الأدبي"])
             else:
@@ -416,7 +422,6 @@ else:
             view_grade = user["grade"]
             sub = st.selectbox("اختر المادة التي ترغب بدراستها:", subs_map[view_grade])
             
-            # عرض الإشعارات للطلاب
             b_df = load_data(BROADCAST_DB)
             if not b_df.empty:
                 my_broadcasts = b_df[(b_df['grade'] == view_grade) & (b_df['subject'] == sub)]
@@ -430,7 +435,7 @@ else:
         # -- تاب التنبيهات والرفع (للأستاذ فقط) --
         if user["role"] == "أستاذ":
             with tabs[tab_index]:
-                st.info("أرسل تنبيهاً أو رسالة سريعة لطلابك (ستظهر لهم أعلى الشاشة).")
+                st.info("أرسل تنبيهاً لطلابك وسيظهر لهم فور دخولهم للمنصة.")
                 b_msg = st.text_area("اكتب الإشعار هنا:")
                 if st.button("🚀 إرسال الإشعار للطلاب"):
                     b_db = load_data(BROADCAST_DB)
@@ -474,7 +479,6 @@ else:
                             uploader_name = r.get("uploader", "غير معروف")
                             ch_n = r.get("chapter_num", 1)
                             
-                            # نظام الـ Freemium (البحث 1 و 2 مجاني، الباقي مقفول إلا للمدفعوع)
                             is_locked = False
                             if user["role"] == "طالب" and not user.get("is_premium", False) and ch_n > 2:
                                 is_locked = True
@@ -536,7 +540,7 @@ else:
                 st.chat_message("assistant").write(o_ans)
         tab_index += 1
 
-        # -- التاب الأخير (المنقذ للطالب / رسائل الإدارة للأستاذ) --
+        # -- التاب الأخير --
         with tabs[tab_index]:
             if user["role"] == "طالب":
                 ca, cb = st.columns(2)
