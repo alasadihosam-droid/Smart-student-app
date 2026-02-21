@@ -262,72 +262,87 @@ elif 12 <= hour < 18: time_greeting = "طاب نهارك 🌤️"
 else: time_greeting = "مساء الخير 🌙"
 
 # ==========================================
-# ستايل الـ CSS الاحترافي الجديد (الثيم الأبيض النظيف)
+# ستايل الـ CSS الخرافي (النقي والفخم)
 # ==========================================
 st.markdown("""
     <style>
     #MainMenu, footer, header {visibility: hidden;}
     html, body, [class*="st-"] { scroll-behavior: smooth; overscroll-behavior-y: none; }
     
-    /* الخلفية البيضاء النقية */
+    /* 1. إجبار التطبيق على الخلفية البيضاء النقية مهما كان وضع الموبايل */
     .stApp { 
-        background-color: #ffffff !important; 
+        background-color: #f8f9fa !important; 
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
     }
     
-    /* الصناديق البيضاء مع ظل خفيف للتمييز */
+    /* 2. صندوق الترحيب: كحلي ليلي فخم لإبراز النص الأبيض */
     .modern-box { 
-        padding: 25px; 
-        background: #ffffff; 
+        padding: 30px 20px; 
+        background: linear-gradient(135deg, #1e293b, #0f172a) !important; 
         border-radius: 20px; 
-        border-right: 6px solid #1E88E5; 
-        box-shadow: 0 10px 30px rgba(0,0,0,0.08); /* ظل أنعم */
+        border-right: 6px solid #3b82f6; 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important; 
         margin-bottom: 25px; 
         transition: transform 0.3s ease;
+        text-align: center;
     }
-    .modern-box:hover { transform: translateY(-3px); }
+    .modern-box:hover { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(0,0,0,0.2) !important; }
     
-    /* صندوق الإشعارات */
+    /* 3. العنوان: تدرج من الأبيض الناصع إلى الرمادي الفضي (كما طلبت تماماً) */
+    .welcome-title { 
+        font-size: 2.5rem !important; 
+        font-weight: 900 !important; 
+        background: linear-gradient(to right, #ffffff 0%, #94a3b8 100%) !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
+        margin-bottom: 10px;
+        filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.4));
+    }
+    
+    /* نصوص ثانوية داخل الصندوق */
+    .programmer-tag { 
+        font-size: 1.1rem; 
+        font-weight: 600; 
+        color: #94a3b8 !important; 
+        letter-spacing: 1px; 
+    }
+    
+    .teacher-badge { 
+        font-size: 0.85rem; 
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8); 
+        color: white !important; 
+        padding: 6px 14px; 
+        border-radius: 20px; 
+        margin-left: 10px; 
+        float: left; 
+        font-weight: bold; 
+        box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+    }
+    
+    /* صندوق الإشعارات البرتقالي */
     .broadcast-box { 
         padding: 20px; 
-        background: linear-gradient(135deg, #FF9800, #FFB74D); 
+        background: linear-gradient(135deg, #f59e0b, #ea580c) !important; 
         border-radius: 16px; 
         margin-bottom: 20px; 
-        color: #ffffff; 
+        color: #ffffff !important; 
         font-weight: bold;
         font-size: 16px;
-        box-shadow: 0 6px 15px rgba(255, 152, 0, 0.3);
+        box-shadow: 0 6px 15px rgba(245, 158, 11, 0.3);
     }
     
-    /* العناوين المتدرجة من الأبيض للرمادي (مع ظل لتكون مقروءة) */
-    .welcome-title { 
-        font-size: 2.2rem; 
-        font-weight: 900; 
-        text-align: center; 
-        /* تدرج فضي/رمادي فاتح */
-        background: linear-gradient(to right, #ffffff 10%, #7f8c8d 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        /* ظل للنص لكي يظهر اللون الأبيض على الخلفية البيضاء */
-        filter: drop-shadow(1px 1px 3px rgba(0,0,0,0.3));
-        margin-bottom: 5px;
-    }
-    .programmer-tag { font-size: 1rem; text-align: center; font-weight: 700; color: #90a4ae; letter-spacing: 1px; }
-    .teacher-badge { font-size: 0.85rem; background: linear-gradient(135deg, #1E88E5, #1565C0); color: white; padding: 6px 14px; border-radius: 20px; margin-left: 10px; float: left; font-weight: bold; box-shadow: 0 4px 10px rgba(30, 136, 229, 0.3);}
-    
-    /* تصميم الأيقونات (الأزرار المربعة) - الكحلي المتدرج */
+    /* 4. تصميم الأيقونات المربعة: أزرق تكنولوجي لامع متناسق مع الأبيض */
     div[data-testid="column"] button { 
         width: 100%; 
-        height: 130px; 
-        border-radius: 24px; 
-        /* لون كحلي/أزرق غامق متباين جداً مع الخلفية البيضاء */
-        background: linear-gradient(135deg, #2c3e50, #3498db); 
-        color: #ffffff; 
-        font-size: 19px; 
+        height: 140px; 
+        border-radius: 20px; 
+        background: linear-gradient(135deg, #2563eb, #3b82f6) !important; 
+        color: #ffffff !important; 
+        font-size: 18px; 
         font-weight: 800; 
-        border: 2px solid rgba(255,255,255,0.1); 
-        box-shadow: 0 10px 25px rgba(52, 152, 219, 0.3), inset 0 2px 5px rgba(255,255,255,0.2); 
-        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); 
+        border: 2px solid rgba(255,255,255,0.1) !important; 
+        box-shadow: 0 10px 25px rgba(37, 99, 235, 0.25), inset 0 2px 5px rgba(255,255,255,0.2) !important; 
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important; 
         display: flex; 
         flex-direction: column; 
         align-items: center; 
@@ -336,18 +351,17 @@ st.markdown("""
         text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
     }
     div[data-testid="column"] button:hover { 
-        transform: translateY(-8px); 
-        box-shadow: 0 15px 35px rgba(52, 152, 219, 0.5), inset 0 2px 5px rgba(255,255,255,0.3); 
-        background: linear-gradient(135deg, #34495e, #2980b9);
+        transform: translateY(-8px) !important; 
+        box-shadow: 0 15px 35px rgba(37, 99, 235, 0.4), inset 0 2px 5px rgba(255,255,255,0.4) !important; 
+        background: linear-gradient(135deg, #1d4ed8, #2563eb) !important;
     }
     div[data-testid="column"] button:active { 
-        transform: translateY(2px) scale(0.96); 
-        box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4); 
+        transform: translateY(2px) scale(0.96) !important; 
     }
     
-    /* زر العودة */
+    /* زر العودة أحمر أنيق */
     .back-btn>button { 
-        background: linear-gradient(135deg, #FF416C, #FF4B2B) !important; 
+        background: linear-gradient(135deg, #ef4444, #dc2626) !important; 
         height: 60px !important; 
         border-radius: 16px !important; 
         margin-bottom: 30px; 
@@ -355,12 +369,17 @@ st.markdown("""
         font-weight: 800 !important; 
         border: none !important; 
         color: white !important; 
-        box-shadow: 0 8px 20px rgba(255, 65, 108, 0.4) !important; 
+        box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3) !important; 
         transition: all 0.3s ease !important;
     }
     .back-btn>button:hover { 
         transform: translateY(-4px) !important; 
-        box-shadow: 0 12px 25px rgba(255, 65, 108, 0.6) !important; 
+        box-shadow: 0 12px 25px rgba(239, 68, 68, 0.5) !important; 
+    }
+    
+    /* إجبار العناوين الفرعية على اللون الداكن لتكون مقروءة على الأبيض */
+    .stMarkdown h3, label, .stMarkdown p {
+        color: #1e293b !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -443,7 +462,7 @@ else:
     user = st.session_state["user_data"]
     
     if user["role"] == "أستاذ" and user.get("is_new", True):
-        st.markdown(f'<div class="modern-box"><div class="welcome-title">أهلاً وسهلاً بك يا أستاذنا الفاضل 👨‍🏫</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="modern-box"><div class="welcome-title">أهلاً بك يا أستاذنا الفاضل 👨‍🏫</div></div>', unsafe_allow_html=True)
         st.info("لتكتمل إعدادات حسابك، يرجى اختيار الصف والمادة التي تدرسها لترتبط ملفاتك بها مباشرة.")
         col_g, col_s = st.columns(2)
         sel_grade = col_g.selectbox("الصف الذي تدرسه:", list(subs_map.keys()) + ["كل الصفوف"])
@@ -581,14 +600,14 @@ else:
             if st.button("فحص الغش 🕵️"):
                 with st.spinner("جاري التحليل المعمق..."):
                     result = check_cheating_smart(text1, text2)
-                    st.markdown(f'<div class="modern-box">{result}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="modern-box" style="color:white;">{result}</div>', unsafe_allow_html=True)
 
     # ----------------------------------------
     # واجهة الطالب والأستاذ المشتركة 
     # ----------------------------------------
     elif user["role"] in ["طالب", "أستاذ"]:
         if user["role"] == "أستاذ":
-            st.markdown(f'<div class="modern-box"><div class="welcome-title">👨‍🏫 أهلاً بك أستاذ {user["user"]}</div><div class="programmer-tag">{teacher_sub} - {teacher_grade}</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="modern-box"><div class="welcome-title">👨‍🏫 أهلاً بك يا أستاذ {user["user"]}</div><div class="programmer-tag">{teacher_sub} - {teacher_grade}</div></div>', unsafe_allow_html=True)
             view_grade = st.selectbox("اختر الصف:", ["التاسع", "البكالوريا العلمي", "البكالوريا الأدبي"]) if teacher_grade == "كل الصفوف" else teacher_grade
             sub = teacher_sub
         else:
@@ -644,14 +663,14 @@ else:
         # تفاصيل الأقسام
         # -----------------------------------------
         elif st.session_state["current_view"] == "notify" and user["role"] == "أستاذ":
-            st.subheader("📢 إرسال إشعار للطلاب")
+            st.markdown("### 📢 إرسال إشعار للطلاب")
             b_msg = st.text_area("اكتب الإشعار هنا لطلابك:")
             if st.button("🚀 إرسال فوراً") and b_msg:
                 save_data(pd.concat([load_data(BROADCAST_DB), pd.DataFrame([{"sender": user["user"], "grade": view_grade, "subject": sub, "message": b_msg, "date": datetime.now().strftime("%Y-%m-%d %H:%M")}])], ignore_index=True), BROADCAST_DB)
                 st.success("تم نشر الإشعار بنجاح!")
 
         elif st.session_state["current_view"] == "upload" and user["role"] == "أستاذ":
-            st.subheader("📤 رفع الملفات وتحليلها")
+            st.markdown("### 📤 رفع الملفات وتحليلها")
             with st.form("upload_form", clear_on_submit=True):
                 uploaded_file = st.file_uploader("اختر ملف (PDF حصراً)", type="pdf")
                 file_name_input = st.text_input("اسم الملف (مثال: نوطة الوحدة الأولى)")
@@ -682,7 +701,7 @@ else:
                             st.success("تم الرفع والتجهيز بنجاح! 🎉")
 
         elif st.session_state["current_view"] == "library":
-            st.subheader("📚 مكتبة الملفات والنوط")
+            st.markdown("### 📚 مكتبة الملفات والنوط")
             f_db = load_data(FILES_DB)
             my_f = f_db[(f_db["grade"] == view_grade) & (f_db["sub"] == sub)] if not f_db.empty else pd.DataFrame()
             if my_f.empty: st.info("المكتبة فارغة حالياً.")
@@ -700,7 +719,7 @@ else:
                         with c_f2: st.markdown(f"<div class='teacher-badge'>أ. {r.get('uploader', 'غير معروف')}</div>", unsafe_allow_html=True)
 
         elif st.session_state["current_view"] == "ai_teacher":
-            st.subheader("🤖 المعلم الذكي (مانع الهلوسة)")
+            st.markdown("### 🤖 المعلم الذكي (مانع الهلوسة)")
             f_db = load_data(FILES_DB)
             my_f = f_db[(f_db["grade"] == view_grade) & (f_db["sub"] == sub)] if not f_db.empty else pd.DataFrame()
             available_files = my_f[my_f["type"] == "بحث"] if not my_f.empty else pd.DataFrame()
@@ -725,7 +744,6 @@ else:
                     if "بالمشرمحي" in style: pr += " اشرحها عامية سورية بأمثلة واقعية"
                     
                     if file_path and os.path.exists(file_path):
-                        # نرسل الان أفضل 3 مقاطع بفضل التحديث
                         best_context = get_best_context_smart(q, file_path, top_k=3)
                         
                     ans = get_ai_response(pr, strict_mode=strict, context_text=best_context)
@@ -733,7 +751,7 @@ else:
                 st.chat_message("assistant").write(ans)
 
         elif st.session_state["current_view"] == "lens":
-            st.subheader("📸 عدسة الذكاء (التصحيح الآلي)")
+            st.markdown("### 📸 عدسة الذكاء (التصحيح الآلي)")
             v_mode = st.radio("الخدمة المطلوبة:", ["شرح مسألة من الصورة", "تصحيح حلي بناءً على السلالم"])
             if img := st.file_uploader("التقط أو ارفع صورة:", type=["jpg", "png", "jpeg"]):
                 if st.button("🚀 بدء التحليل"):
@@ -741,9 +759,9 @@ else:
                         st.info(get_ai_response(f"أنت معلم مادة {sub}. " + ("اشرح الحل المرفق" if v_mode=="شرح مسألة" else "صحح الحل بناء على السلالم السورية وأعط درجة."), image=Image.open(img), strict_mode=True))
 
         elif st.session_state["current_view"] == "exams":
-            st.subheader("📝 قسم الامتحانات والتسميع")
+            st.markdown("### 📝 قسم الامتحانات والتسميع")
             if st.button("🎯 توليد أسئلة أتمتة شاملة"): 
-                st.markdown(f'<div class="modern-box">{get_ai_response(f"ولد نموذج وزاري سوري لمادة {sub} معتمداً حصراً على أسلوب النماذج المرفوعة.", strict_mode=True)}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="modern-box" style="color:white;">{get_ai_response(f"ولد نموذج وزاري سوري لمادة {sub} معتمداً حصراً على أسلوب النماذج المرفوعة.", strict_mode=True)}</div>', unsafe_allow_html=True)
             
             st.markdown("---")
             st.markdown("🗣️ **التسميع الشفهي الذكي (تحدث ليتم التقييم)**")
@@ -758,17 +776,17 @@ else:
                     st.success(o_ans)
 
         elif st.session_state["current_view"] == "plan" and user["role"] == "طالب":
-            st.subheader("📅 المولد السحري لخطة الدراسة")
+            st.markdown("### 📅 المولد السحري لخطة الدراسة")
             c_plan1, c_plan2 = st.columns(2)
             days_left = c_plan1.number_input("كم يوم متبقي للامتحان؟", 1, value=20)
             hours_daily = c_plan2.slider("كم ساعة تستطيع الدراسة باليوم؟", 1, 15, 6)
             if st.button("توليد الخطة 🪄"):
                 with st.spinner("جاري التخطيط لمستقبلك..."):
                     plan_prompt = f"أنا طالب سوري في {view_grade}. متبقي {days_left} يوماً للامتحان، سأدرس {hours_daily} ساعات يومياً مادة {sub}. قم بتوليد جدول دراسي يومي واقعي مع فترات مراجعة."
-                    st.markdown(f'<div class="modern-box">{get_ai_response(plan_prompt)}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="modern-box" style="color:white;">{get_ai_response(plan_prompt)}</div>', unsafe_allow_html=True)
 
         elif st.session_state["current_view"] == "past_papers":
-            st.subheader("📖 مستكشف أسئلة الدورات السابقة")
+            st.markdown("### 📖 مستكشف أسئلة الدورات السابقة")
             st.info("الذكاء الاصطناعي سيستخرج لك الأسئلة التي وردت في الدورات السابقة للبحث الذي تختاره حصراً بدقة عالية جداً بفضل الـ File API.")
             
             f_db = load_data(FILES_DB)
@@ -787,7 +805,6 @@ else:
                         if os.path.exists(file_path):
                             with st.spinner("يقرأ ملف الدورات ويستخرج الأسئلة المطلوبة..."):
                                 try:
-                                    # رفع الملف مؤقتاً لخوادم جوجل لمعالجته كقطعة واحدة
                                     uploaded_gemini_file = genai.upload_file(file_path)
                                     
                                     prompt = f"""أنت خبير في المنهاج السوري. اقرأ ملف أسئلة الدورات السورية المرفق هذا، واستخرج **فقط** الأسئلة التي تخص موضوع أو بحث '{topic_query}'.
@@ -796,9 +813,8 @@ else:
                                     - لا تقم بالإجابة على الأسئلة، فقط استخرجها ورتبها في قائمة."""
                                     
                                     res = get_ai_response(prompt, strict_mode=False, file_uri=uploaded_gemini_file)
-                                    st.markdown(f'<div class="modern-box">{res}</div>', unsafe_allow_html=True)
+                                    st.markdown(f'<div class="modern-box" style="color:white;">{res}</div>', unsafe_allow_html=True)
                                     
-                                    # حذف الملف من خوادم جوجل بعد الانتهاء للحفاظ على المساحة والخصوصية
                                     genai.delete_file(uploaded_gemini_file.name)
                                 except Exception as e:
                                     st.error(f"حدث خطأ أثناء معالجة الملف: {str(e)}")
