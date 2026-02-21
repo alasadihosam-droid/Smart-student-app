@@ -3,3 +3,4 @@ pandas
 Pillow
 google-generativeai>=0.8.2
 gTTS
+requests
