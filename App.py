@@ -42,7 +42,7 @@ OWNER_PASS_HASH = hash_password_secure("hosam031007")
 # ==========================================
 # 2. وظائف استخراج النص والـ RAG الاحترافي (سريع ودقيق)
 # ==========================================
-def extract_and_chunk_pdf_smart(pdf_path, max_chunk_size=1500):
+def extract_and_chunk_pdf_smart(pdf_path, max_chunk_size=1500, overlap_size=200):
     chunks = []
     try:
         import PyPDF2
@@ -50,7 +50,12 @@ def extract_and_chunk_pdf_smart(pdf_path, max_chunk_size=1500):
             reader = PyPDF2.PdfReader(f)
             text = "".join([page.extract_text() or "" for page in reader.pages])
             
-            # تقسيم النص حسب الفقرات لتجنب كسر المعنى
+            # حل المشكلة 3: التنبيه في حال كان الملف فارغاً أو صوراً غير مقروءة
+            if not text.strip():
+                st.warning(f"⚠️ تنبيه: لم نتمكن من استخراج نص من الملف '{os.path.basename(pdf_path)}'. قد يكون الملف عبارة عن صور (Scanned).")
+                return []
+            
+            # حل المشكلة 4: تقسيم النص مع التداخل (Overlap) للحفاظ على السياق
             paragraphs = text.split('\n\n')
             current_chunk = ""
             
@@ -60,23 +65,25 @@ def extract_and_chunk_pdf_smart(pdf_path, max_chunk_size=1500):
                 else:
                     if current_chunk.strip():
                         chunks.append(current_chunk.strip())
-                    current_chunk = para + "\n\n"
+                    # أخذ جزء من نهاية المقطع السابق لضمان ترابط المعنى
+                    overlap_text = current_chunk[-overlap_size:] if len(current_chunk) > overlap_size else current_chunk
+                    current_chunk = overlap_text + "\n" + para + "\n\n"
+                    
             if current_chunk.strip():
                 chunks.append(current_chunk.strip())
     except Exception as e:
-        pass
+        # إظهار الخطأ بدل تجاهله
+        st.error(f"⚠️ حدث خطأ أثناء قراءة الملف: {str(e)}")
     return chunks
 
 @st.cache_data 
 def get_and_save_embeddings(pdf_path):
     embed_file = pdf_path.replace('.pdf', '_embeddings.json')
     
-    # قراءة المتجهات إذا كانت محفوظة مسبقاً (سريع جداً)
     if os.path.exists(embed_file):
         with open(embed_file, 'r', encoding='utf-8') as f:
             return json.load(f)
             
-    # حساب المتجهات لأول مرة وحفظها
     chunks = extract_and_chunk_pdf_smart(pdf_path)
     embeddings_data = []
     
@@ -114,7 +121,6 @@ def get_best_context_smart(query, pdf_path):
         if score > max_score:
             max_score, best_chunk = score, chunk
             
-    # عتبة التطابق 50%
     return best_chunk if max_score > 0.50 else ""
 
 # ==========================================
@@ -163,7 +169,6 @@ def get_ai_response(prompt, image=None, audio=None, strict_mode=False, context_t
         return "⚠️ تم رفض الاتصال. جرب تشغيل VPN."
     except Exception as e: return f"⚠️ خطأ عام: {str(e)}"
 
-# نظام كشف الغش الذكي بالاعتماد على Gemini
 def check_cheating_smart(text1, text2):
     prompt = f"""أنت خبير في كشف الغش الأكاديمي.
     لدينا إجابتان من طالبين مختلفين لنفس السؤال العلمي أو الأدبي.
@@ -242,19 +247,82 @@ if 5 <= hour < 12: time_greeting = "صباح الخير ☀️"
 elif 12 <= hour < 18: time_greeting = "طاب نهارك 🌤️"
 else: time_greeting = "مساء الخير 🌙"
 
+# تحديث الـ CSS بألوان عصرية، تدرجات متناسقة، وحركات تفاعلية جذابة
 st.markdown("""
     <style>
     #MainMenu, footer, header {visibility: hidden;}
     html, body, [class*="st-"] { scroll-behavior: smooth; overscroll-behavior-y: none; }
-    .stApp { overflow-x: hidden; }
-    .modern-box { padding: 15px; background-color: rgba(30, 136, 229, 0.05); border-radius: 10px; border-right: 4px solid #1E88E5; margin-bottom: 15px; }
-    .broadcast-box { padding: 15px; background-color: #fff3cd; border-right: 4px solid #ffc107; border-radius: 10px; margin-bottom: 15px; color: black; }
-    .welcome-title { font-size: 1.8rem; font-weight: bold; text-align: center; color: #1E88E5; }
-    .programmer-tag { font-size: 0.85rem; text-align: center; font-weight: bold; opacity: 0.7; }
-    .teacher-badge { font-size: 0.8rem; background-color: #f0f2f6; color: #1E88E5; padding: 2px 8px; border-radius: 10px; border: 1px solid #1E88E5; margin-left: 10px; float: left; }
-    div[data-testid="column"] button { width: 100%; height: 110px; border-radius: 15px; background: linear-gradient(135deg, #1E88E5, #1565C0); color: white; font-size: 16px; font-weight: bold; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s, box-shadow 0.2s; margin-bottom: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    div[data-testid="column"] button:active { transform: scale(0.95); }
-    .back-btn>button { background: #f44336 !important; height: 50px !important; margin-bottom: 20px; font-size: 18px !important; }
+    .stApp { overflow-x: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    
+    /* الصناديق الحديثة */
+    .modern-box { 
+        padding: 20px; 
+        background: linear-gradient(145deg, #ffffff, #f0f4f8); 
+        border-radius: 12px; 
+        border-right: 5px solid #00BCD4; 
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        margin-bottom: 20px; 
+    }
+    .broadcast-box { 
+        padding: 15px; 
+        background: linear-gradient(135deg, #fff9c4, #fff59d); 
+        border-right: 5px solid #ffb300; 
+        border-radius: 12px; 
+        margin-bottom: 15px; 
+        color: #3e2723;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    /* النصوص المميزة */
+    .welcome-title { font-size: 2rem; font-weight: 800; text-align: center; color: #1565C0; margin-bottom: 5px;}
+    .programmer-tag { font-size: 0.95rem; text-align: center; font-weight: 600; color: #546E7A; }
+    .teacher-badge { font-size: 0.85rem; background-color: #E1F5FE; color: #0277BD; padding: 4px 12px; border-radius: 15px; border: 1px solid #81D4FA; margin-left: 10px; float: left; font-weight: bold;}
+    
+    /* أزرار القائمة الرئيسية (تفاعلية ومتدرجة) */
+    div[data-testid="column"] button { 
+        width: 100%; 
+        height: 120px; 
+        border-radius: 16px; 
+        background: linear-gradient(135deg, #1E88E5, #00ACC1); 
+        color: white; 
+        font-size: 18px; 
+        font-weight: 700; 
+        border: none; 
+        box-shadow: 0 6px 12px rgba(0, 172, 193, 0.2); 
+        transition: all 0.3s ease; 
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        justify-content: center; 
+        letter-spacing: 0.5px;
+    }
+    div[data-testid="column"] button:hover { 
+        transform: translateY(-5px); 
+        box-shadow: 0 10px 20px rgba(0, 172, 193, 0.4); 
+        background: linear-gradient(135deg, #1565C0, #0097A7);
+    }
+    div[data-testid="column"] button:active { 
+        transform: translateY(2px) scale(0.98); 
+    }
+    
+    /* زر العودة (أحمر أنيق) */
+    .back-btn>button { 
+        background: linear-gradient(135deg, #EF5350, #C62828) !important; 
+        height: 55px !important; 
+        border-radius: 12px !important;
+        margin-bottom: 25px; 
+        font-size: 18px !important; 
+        font-weight: bold !important;
+        border: none !important;
+        color: white !important;
+        box-shadow: 0 4px 10px rgba(198, 40, 40, 0.3) !important;
+        transition: all 0.3s ease !important;
+    }
+    .back-btn>button:hover {
+        transform: translateY(-3px) !important;
+        box-shadow: 0 6px 15px rgba(198, 40, 40, 0.5) !important;
+        background: linear-gradient(135deg, #E53935, #B71C1C) !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -441,7 +509,6 @@ else:
                 row = f_df[f_df['name'] == file_to_del].iloc[0]
                 t_path = os.path.join("lessons" if row['type'] in ["بحث", "دورات"] else "exams", file_to_del)
                 if os.path.exists(t_path): os.remove(t_path)
-                # حذف ملف الـ Embeddings المرتبط إذا وجد
                 embed_path = t_path.replace('.pdf', '_embeddings.json')
                 if os.path.exists(embed_path): os.remove(embed_path)
                 f_df[f_df['name'] != file_to_del].to_csv(FILES_DB, index=False)
@@ -621,7 +688,6 @@ else:
                     if "بالمشرمحي" in style: pr += " اشرحها عامية سورية بأمثلة واقعية"
                     
                     if file_path and os.path.exists(file_path):
-                        # البحث في المتجهات المحفوظة محلياً (سريع جداً)
                         best_context = get_best_context_smart(q, file_path)
                         
                     ans = get_ai_response(pr, strict_mode=strict, context_text=best_context)
@@ -683,7 +749,6 @@ else:
                         file_path = os.path.join("lessons", selected_paper)
                         if os.path.exists(file_path):
                             with st.spinner("يقرأ ملف الدورات ويستخرج الأسئلة المطلوبة..."):
-                                # قراءة ملف الدورات كاملاً 
                                 paper_chunks = extract_and_chunk_pdf_smart(file_path, max_chunk_size=4000)
                                 paper_text = " ".join(paper_chunks)
                                 
