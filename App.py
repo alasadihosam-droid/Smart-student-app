@@ -262,26 +262,26 @@ elif 12 <= hour < 18: time_greeting = "طاب نهارك 🌤️"
 else: time_greeting = "مساء الخير 🌙"
 
 # ==========================================
-# ستايل الـ CSS الاحترافي الجديد (متعوب عليه)
+# ستايل الـ CSS الاحترافي الجديد (الثيم الأبيض النظيف)
 # ==========================================
 st.markdown("""
     <style>
     #MainMenu, footer, header {visibility: hidden;}
     html, body, [class*="st-"] { scroll-behavior: smooth; overscroll-behavior-y: none; }
     
-    /* لون خلفية التطبيق كامل ليعطي تباين مع الأزرار */
+    /* الخلفية البيضاء النقية */
     .stApp { 
-        background-color: #f4f6f9; 
+        background-color: #ffffff !important; 
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
     }
     
-    /* الصناديق والمربعات البيضاء الأنيقة */
+    /* الصناديق البيضاء مع ظل خفيف للتمييز */
     .modern-box { 
         padding: 25px; 
         background: #ffffff; 
         border-radius: 20px; 
         border-right: 6px solid #1E88E5; 
-        box-shadow: 0 10px 25px rgba(0,0,0,0.06); 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08); /* ظل أنعم */
         margin-bottom: 25px; 
         transition: transform 0.3s ease;
     }
@@ -299,25 +299,28 @@ st.markdown("""
         box-shadow: 0 6px 15px rgba(255, 152, 0, 0.3);
     }
     
-    /* العناوين المتدرجة */
+    /* العناوين المتدرجة من الأبيض للرمادي (مع ظل لتكون مقروءة) */
     .welcome-title { 
         font-size: 2.2rem; 
         font-weight: 900; 
         text-align: center; 
-        background: linear-gradient(to left, #1E88E5, #8E24AA);
+        /* تدرج فضي/رمادي فاتح */
+        background: linear-gradient(to right, #ffffff 10%, #7f8c8d 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        /* ظل للنص لكي يظهر اللون الأبيض على الخلفية البيضاء */
+        filter: drop-shadow(1px 1px 3px rgba(0,0,0,0.3));
         margin-bottom: 5px;
     }
-    .programmer-tag { font-size: 1rem; text-align: center; font-weight: 700; color: #78909C; letter-spacing: 1px; }
+    .programmer-tag { font-size: 1rem; text-align: center; font-weight: 700; color: #90a4ae; letter-spacing: 1px; }
     .teacher-badge { font-size: 0.85rem; background: linear-gradient(135deg, #1E88E5, #1565C0); color: white; padding: 6px 14px; border-radius: 20px; margin-left: 10px; float: left; font-weight: bold; box-shadow: 0 4px 10px rgba(30, 136, 229, 0.3);}
     
-    /* تصميم الأيقونات (الأزرار المربعة) - التحديث السحري */
+    /* تصميم الأيقونات (الأزرار المربعة) - الكحلي المتدرج */
     div[data-testid="column"] button { 
         width: 100%; 
         height: 130px; 
         border-radius: 24px; 
-        /* لون كحلي/أزرق غامق متباين جداً مع الخلفية الفاتحة */
+        /* لون كحلي/أزرق غامق متباين جداً مع الخلفية البيضاء */
         background: linear-gradient(135deg, #2c3e50, #3498db); 
         color: #ffffff; 
         font-size: 19px; 
