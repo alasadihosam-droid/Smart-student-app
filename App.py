@@ -8,7 +8,7 @@ from gtts import gTTS
 import io
 import hashlib
 import re
-import requests # إضافة مكتبة الطلبات للتواصل مع التلغرام
+import requests
 
 # ==========================================
 # 1. إعدادات الأمان، الذكاء الاصطناعي والتلغرام
@@ -20,7 +20,6 @@ try:
         st.error("⚠️ مفتاح API غير موجود. يرجى إضافة GEMINI_API_KEY في ملف Secrets.")
         st.stop()
         
-    # جلب مفتاح التلغرام (اختياري، لن يوقف المنصة إذا لم يكن موجوداً)
     BOT_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
 except Exception as e:
     st.error(f"⚠️ خطأ في الوصول إلى Secrets: {e}")
@@ -68,7 +67,6 @@ def speak_text(text):
 # دوال التواصل مع بوت التلغرام
 # ==========================================
 def get_telegram_updates(token):
-    """جلب آخر الرسائل المرسلة إلى البوت"""
     url = f"https://api.telegram.org/bot{token}/getUpdates"
     try:
         r = requests.get(url).json()
@@ -79,7 +77,6 @@ def get_telegram_updates(token):
     return []
 
 def download_telegram_file(token, file_id, dest_path):
-    """تحميل الملف من سيرفرات تلغرام مباشرة إلى سيرفر المنصة"""
     file_info_url = f"https://api.telegram.org/bot{token}/getFile?file_id={file_id}"
     try:
         r = requests.get(file_info_url).json()
@@ -147,6 +144,10 @@ st.markdown(f"""
         padding: 15px; background-color: #f8f9fa; border-right: 5px solid #D32F2F; 
         border-radius: 8px; color: black; margin-bottom: 15px;
     }}
+    .exam-box {{
+        padding: 20px; background-color: #fff3e0; border: 2px dashed #ff9800;
+        border-radius: 10px; color: black; margin-top: 15px;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -160,6 +161,8 @@ if "user_data" not in st.session_state:
     st.session_state["user_data"] = None
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
+if "oral_exam_history" not in st.session_state:
+    st.session_state["oral_exam_history"] = []
 
 # ==========================================
 # 4. شاشة الدخول والتسجيل
@@ -176,7 +179,8 @@ if st.session_state["user_data"] is None:
             p = st.text_input("كلمة المرور", type="password", key="login_p")
             
         if st.button("دخول المنصة"):
-            if u == "Hosam" and p == "Anahosam031007":
+            # تم تحديث كلمة السر للمالك حسب طلبك
+            if u == "Hosam" and p == "hosam031007":
                 st.session_state["user_data"] = {"user": u, "role": "Owner", "grade": "الكل"}
                 st.rerun()
             else:
@@ -227,6 +231,7 @@ else:
     if st.sidebar.button("🔴 تسجيل الخروج"):
         st.session_state["user_data"] = None
         st.session_state["chat_history"] = []
+        st.session_state["oral_exam_history"] = []
         st.rerun()
 
     # ----------------------------------------
@@ -236,61 +241,45 @@ else:
         st.header("👑 لوحة تحكم الإدارة الشاملة")
         t_users, t_files, t_all_grades = st.tabs(["👥 إدارة المستخدمين", "📁 إدارة الملفات", "📊 السجلات والدرجات"])
         
-        # إدارة المستخدمين
         with t_users:
             st.markdown('<div class="admin-card">هنا يمكنك عرض جميع الحسابات، وتعديل بياناتها، أو حذف أي مستخدم نهائياً.</div>', unsafe_allow_html=True)
             u_df = load_data(USERS_DB)
-            
             del_col, edit_col = st.columns([1, 2])
             with del_col:
-                st.subheader("حذف مستخدم")
                 user_to_del = st.selectbox("اختر اسم المستخدم للحذف:", [""] + list(u_df['user'].values))
                 if st.button("🗑️ تأكيد الحذف") and user_to_del:
                     u_df = u_df[u_df['user'] != user_to_del]
                     u_df.to_csv(USERS_DB, index=False)
-                    st.success(f"تم حذف المستخدم {user_to_del} بنجاح!")
+                    st.success(f"تم حذف {user_to_del}")
                     st.rerun()
-            
             with edit_col:
-                st.subheader("تعديل شامل للبيانات")
                 edited_u = st.data_editor(u_df, num_rows="dynamic", use_container_width=True)
                 if st.button("💾 حفظ تعديلات المستخدمين"):
                     edited_u.to_csv(USERS_DB, index=False)
                     st.success("تم الحفظ!")
 
-        # إدارة الملفات
         with t_files:
-            st.markdown('<div class="admin-card">لحذف ملف بالكامل (من قاعدة البيانات ومن السيرفر)، اختره من القائمة واضغط حذف.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="admin-card">لحذف ملف بالكامل (من قاعدة البيانات ومن السيرفر).</div>', unsafe_allow_html=True)
             f_df = load_data(FILES_DB)
-            
             f_del_col, f_edit_col = st.columns([1, 2])
             with f_del_col:
-                st.subheader("حذف ملف")
                 file_to_del = st.selectbox("اختر الملف للحذف:", [""] + list(f_df['name'].values))
                 if st.button("🗑️ حذف الملف نهائياً") and file_to_del:
-                    # حذف الملف فعلياً من السيرفر
                     file_row = f_df[f_df['name'] == file_to_del].iloc[0]
                     folder = "lessons" if file_row['type'] == "بحث" else "exams"
                     target_path = os.path.join(folder, file_to_del)
-                    if os.path.exists(target_path):
-                        os.remove(target_path)
-                    
-                    # حذفه من قاعدة البيانات
+                    if os.path.exists(target_path): os.remove(target_path)
                     f_df = f_df[f_df['name'] != file_to_del]
                     f_df.to_csv(FILES_DB, index=False)
-                    st.success("تم تدمير الملف بنجاح!")
+                    st.success("تم تدمير الملف!")
                     st.rerun()
-                    
             with f_edit_col:
-                st.subheader("سجل الملفات")
                 edited_f = st.data_editor(f_df, num_rows="dynamic", use_container_width=True)
                 if st.button("💾 حفظ تعديلات الملفات"):
                     edited_f.to_csv(FILES_DB, index=False)
                     st.success("تم الحفظ!")
                     
-        # إدارة الدرجات
         with t_all_grades:
-            st.subheader("إدارة السجلات")
             g_df = load_data(GRADES_DB)
             edited_g = st.data_editor(g_df, num_rows="dynamic", use_container_width=True)
             if st.button("💾 حفظ تعديلات الدرجات"):
@@ -302,14 +291,13 @@ else:
     # ----------------------------------------
     elif user["role"] == "أستاذ":
         st.header("👨‍🏫 مركز رفع الدروس (عبر التلغرام)")
-        st.info("قم بإرسال أي ملف PDF إلى بوت التلغرام الخاص بك 📱، ثم اضغط على 'جلب الملفات' هنا لرفعه للمنصة بنقرة واحدة (وداعاً لأخطاء الرفع!).")
+        st.info("أرسل ملف PDF إلى بوت التلغرام، ثم اضغط 'جلب الملفات' لرفعه للمنصة.")
         
         if not BOT_TOKEN:
-            st.warning("⚠️ ميزة التلغرام غير مفعلة. يرجى من المالك وضع TELEGRAM_BOT_TOKEN في الـ Secrets.")
+            st.warning("⚠️ ميزة التلغرام غير مفعلة. يرجى وضع TELEGRAM_BOT_TOKEN في الـ Secrets.")
         else:
-            # 1. جلب الملفات من التلغرام
             if st.button("🔄 جلب أحدث الملفات المرسلة للبوت"):
-                with st.spinner("جاري الاتصال بالتلغرام..."):
+                with st.spinner("جاري الاتصال..."):
                     updates = get_telegram_updates(BOT_TOKEN)
                     docs = []
                     for u in updates:
@@ -319,159 +307,179 @@ else:
                                 docs.append({
                                     "id": doc["file_id"],
                                     "name": doc.get("file_name", "ملف_بدون_اسم.pdf"),
-                                    "date": datetime.fromtimestamp(u["message"]["date"]).strftime("%Y-%m-%d %H:%M:%S")
+                                    "date": datetime.fromtimestamp(u["message"]["date"]).strftime("%Y-%m-%d %H:%M")
                                 })
                     if docs:
-                        st.session_state["tg_docs"] = docs[-10:] # الاحتفاظ بآخر 10 ملفات فقط
-                        st.success("تم العثور على ملفات جديدة!")
+                        st.session_state["tg_docs"] = docs[-10:]
+                        st.success("تم العثور على ملفات!")
                     else:
-                        st.warning("لم يتم العثور على ملفات PDF جديدة في البوت.")
+                        st.warning("لا يوجد ملفات PDF جديدة.")
 
-            # 2. عرض الملفات المجلوبة واختيار أحدها لرفعه
             if st.session_state.get("tg_docs"):
                 st.markdown("---")
-                st.subheader("📥 اختيار الملف وتصنيفه")
-                
-                doc_dict = {f"{d['name']} (أرسل في: {d['date']})": d for d in st.session_state["tg_docs"]}
-                selected_doc_name = st.selectbox("اختر الملف الذي أرسلته للبوت:", list(doc_dict.keys()))
+                doc_dict = {f"{d['name']} ({d['date']})": d for d in st.session_state["tg_docs"]}
+                selected_doc_name = st.selectbox("اختر الملف لرفعه:", list(doc_dict.keys()))
                 selected_doc = doc_dict[selected_doc_name]
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    tg = st.selectbox("استهداف الصف:", list(subs_map.keys()))
-                with col2:
-                    ts = st.selectbox("المادة:", subs_map[tg])
-                
+                c1, c2 = st.columns(2)
+                tg = c1.selectbox("الصاف:", list(subs_map.keys()))
+                ts = c2.selectbox("المادة:", subs_map[tg])
                 type_f = st.radio("نوع الملف:", ["بحث", "نموذج امتحاني"])
                 
-                if st.button("🚀 سحب الملف للمنصة الآن"):
-                    clean_name = selected_doc['name'].replace(' ', '_')
-                    f_name = f"{type_f}_{ts}_{clean_name}"
+                if st.button("🚀 سحب الملف للمنصة"):
+                    f_name = f"{type_f}_{ts}_{selected_doc['name'].replace(' ', '_')}"
                     folder = "lessons" if type_f == "بحث" else "exams"
                     dest_path = os.path.join(folder, f_name)
                     
-                    with st.spinner("جاري سحب الملف من سيرفر التلغرام..."):
+                    with st.spinner("جاري السحب..."):
                         if download_telegram_file(BOT_TOKEN, selected_doc['id'], dest_path):
                             f_db = load_data(FILES_DB)
-                            new_file = pd.DataFrame([{
-                                "name": f_name, "grade": tg, "sub": ts, 
-                                "type": type_f, "date": datetime.now().strftime("%Y-%m-%d")
-                            }])
+                            new_file = pd.DataFrame([{"name": f_name, "grade": tg, "sub": ts, "type": type_f, "date": datetime.now().strftime("%Y-%m-%d")}])
                             pd.concat([f_db, new_file], ignore_index=True).to_csv(FILES_DB, index=False)
-                            st.success(f"تم رفع الملف '{f_name}' بنجاح! ✅")
-                            st.balloons()
+                            st.success("تم الرفع بنجاح!")
                         else:
-                            st.error("⚠️ فشل في سحب الملف، تأكد من اتصال الإنترنت.")
+                            st.error("فشل السحب.")
 
     # ----------------------------------------
     # واجهة الطالب
     # ----------------------------------------
     elif user["role"] == "طالب":
         st.markdown(f'<div class="greeting-box"><h3>{greeting} يا بطل</h3><p>الصف: {user["grade"]}</p></div>', unsafe_allow_html=True)
-        
         sub = st.selectbox("اختر المادة التي ترغب بدراستها:", subs_map[user['grade']])
-        t_study, t_ai, t_plan, t_progress = st.tabs(["📚 المكتبة والدروس", "🤖 المعلم والمصحح الذكي", "📅 منقذ الامتحانات", "📊 مستواي الدراسي"])
+        
+        t_study, t_ai, t_vision, t_exams, t_plan, t_progress = st.tabs([
+            "📚 المكتبة", 
+            "🤖 المعلم الذكي (ابن البلد)", 
+            "📸 عدسة الذكاء الاصطناعي", 
+            "📝 محاكي الامتحانات", 
+            "📅 المنقذ", 
+            "📊 مستواي"
+        ])
         
         # 1. المكتبة
         with t_study:
-            search_q = st.text_input("🔍 ابحث عن اسم درس أو ملف معين...")
+            search_q = st.text_input("🔍 ابحث عن اسم درس...")
             f_db = load_data(FILES_DB)
-            
             if not f_db.empty:
                 my_f = f_db[(f_db["grade"] == user["grade"]) & (f_db["sub"] == sub)]
-                if search_q:
-                    my_f = my_f[my_f['name'].str.contains(search_q, case=False)]
-                
-                if my_f.empty:
-                    st.info("لا توجد ملفات مرفوعة لهذه المادة حتى الآن.")
+                if search_q: my_f = my_f[my_f['name'].str.contains(search_q, case=False)]
+                if my_f.empty: st.info("لا توجد ملفات مرفوعة.")
                 else:
                     for _, r in my_f.iterrows():
-                        folder = "lessons" if r['type'] == "بحث" else "exams"
+                        folder, path = ("lessons" if r['type'] == "بحث" else "exams"), ""
                         path = os.path.join(folder, r['name'])
-                        
                         if os.path.exists(path):
                             with open(path, "rb") as f:
-                                st.download_button(
-                                    label=f"📥 تحميل: {r['name'].split('_')[-1]}", 
-                                    data=f, file_name=r['name'], key=r['name']
-                                )
-                        else:
-                            st.warning(f"الملف {r['name']} مسجل ولكنه غير موجود في النظام.")
-            else:
-                st.info("المكتبة فارغة حالياً.")
+                                st.download_button(label=f"📥 {r['name'].split('_')[-1]}", data=f, file_name=r['name'], key=r['name'])
+            else: st.info("المكتبة فارغة.")
 
-        # 2. المعلم الذكي
+        # 2. المعلم الذكي (إضافة ابن البلد والربط بالواقع)
         with t_ai:
             st.subheader("💬 اسأل المعلم الذكي")
+            
+            # خيارات الشرح الجديدة
+            style = st.radio("كيف ترغب أن يشرح لك المعلم؟", ["شرح علمي عادي", "شرح بالمشرمحي (ابن البلد 🇸🇾)", "ربط بالواقع السوري 🛠️"], horizontal=True)
+            
             for msg in st.session_state["chat_history"]:
-                with st.chat_message(msg["role"]):
-                    st.write(msg["content"])
+                with st.chat_message(msg["role"]): st.write(msg["content"])
             
             q = st.chat_input("اكتب سؤالك هنا...")
             if q:
                 st.session_state["chat_history"].append({"role": "user", "content": q})
-                with st.chat_message("user"):
-                    st.write(q)
+                with st.chat_message("user"): st.write(q)
                 
-                with st.spinner("المعلم يكتب الإجابة..."):
-                    ai_prompt = f"أنت معلم خبير. أجب عن هذا السؤال في مادة {sub} لصف {user['grade']}: {q}"
+                with st.spinner("المعلم يجهز الإجابة..."):
+                    ai_prompt = f"أنت معلم خبير في سوريا. أجب عن هذا السؤال لمادة {sub} لصف {user['grade']}: {q}\n"
+                    
+                    if style == "شرح بالمشرمحي (ابن البلد 🇸🇾)":
+                        ai_prompt += "المطلوب: اشرح هذه الفكرة باللهجة السورية العامية (بالمشرمحي) واستخدم أمثلة من الشارع السوري، الحارة، أو المطبخ (مثل طنجرة الضغط، الميكرو، الخ) لتسهيل الفهم وكسر الجمود الدراسي."
+                    elif style == "ربط بالواقع السوري 🛠️":
+                        ai_prompt += "المطلوب: بدلاً من إعطاء الجواب كأرقام مجردة، اشرح المفهوم أو حل المسألة بربطها بسيناريوهات من الواقع السوري اليومي (مثل تعبئة خزان المياه، انقطاع الكهرباء، المواصلات والسرافيس) لتكون الفكرة منطقية تماماً في ذهن الطالب."
+                        
                     ans = get_ai_response(ai_prompt)
                 
                 st.session_state["chat_history"].append({"role": "assistant", "content": ans})
                 with st.chat_message("assistant"):
                     st.write(ans)
                     audio = speak_text(ans)
-                    if audio:
-                        st.audio(audio, format="audio/mp3")
+                    if audio: st.audio(audio, format="audio/mp3")
 
-            st.markdown("---")
-            st.subheader("📸 مصحح الأوراق الذكي")
-            img = st.file_uploader("ارفع صورة الحل لتقييمها", type=["jpg", "png", "jpeg"])
+        # 3. عدسة الذكاء الاصطناعي (البحث العكسي والمصحح المقارن)
+        with t_vision:
+            st.subheader("📸 عدسة الذكاء الاصطناعي")
+            vision_mode = st.radio("اختر الخدمة:", ["البحث العكسي (كيف أحل هذه المسألة؟)", "المصحح الآلي المقارن (أين خطأي؟)"])
             
-            if img and st.button("ابدأ عملية التصحيح"):
-                with st.spinner("جاري قراءة الصورة وتحليل الحل..."):
+            img = st.file_uploader("ارفع صورة المسألة أو الحل", type=["jpg", "png", "jpeg"])
+            
+            if img and st.button("🚀 بدء التحليل البصري"):
+                with st.spinner("الذكاء الاصطناعي يقوم بمسح الصورة وتحليلها..."):
                     img_opened = Image.open(img)
-                    grader_prompt = f"صحح ورقة الطالب هذه في مادة {sub} لصف {user['grade']} واعط علامة من 100."
-                    res = get_ai_response(grader_prompt, img_opened)
+                    
+                    if vision_mode == "البحث العكسي (كيف أحل هذه المسألة؟)":
+                        v_prompt = f"أنت معلم ذكي لمادة {sub} لصف {user['grade']}. الطالب يواجه صعوبة في هذه المسألة المرفقة بالصورة. لا تعطه الجواب النهائي مباشرة. بل قم بالآتي: 1. اشرح له ما هو 'الدرس أو القانون' الذي تنتمي إليه هذه المسألة. 2. علمه 'طريقة وخطوات الحل' خطوة بخطوة ليفهم الفكرة ويحلها بنفسه."
+                        res = get_ai_response(v_prompt, img_opened)
+                        st.info(res)
+                        
+                    elif vision_mode == "المصحح الآلي المقارن (أين خطأي؟)":
+                        v_prompt = f"أنت مصحح امتحانات قاسي ودقيق لمادة {sub} لصف {user['grade']}. هذه ورقة طالب تحتوي على حل. قم بتحليل الحل خطوة بخطوة ومقارنته بالحل النموذجي. إذا كان هناك خطأ، حدد بدقة متناهية 'السطر أو الخطوة' التي وقع فيها الخطأ (اكتب: 'تخيل أنني رسمت لك دائرة حمراء هنا: ...') واشرح لماذا أخطأ وكيف يصححه. في النهاية أعطه درجة من 100."
+                        res = get_ai_response(v_prompt, img_opened)
+                        st.info(res)
+                        try:
+                            match = re.search(r'\d+', res)
+                            if match:
+                                score = min(int(match.group()), 100)
+                                pd.concat([load_data(GRADES_DB), pd.DataFrame([{"user": user['user'], "sub": sub, "score": score, "date": datetime.now().strftime("%Y-%m-%d %H:%M")}])], ignore_index=True).to_csv(GRADES_DB, index=False)
+                                st.toast(f"تم تسجيل نتيجتك: {score}/100")
+                        except: pass
+
+        # 4. محاكي الامتحانات (الوزاري والشفهي)
+        with t_exams:
+            exam_mode = st.radio("اختر نوع الامتحان:", ["📝 محاكي الامتحان الوزاري الشامل", "🗣️ المقابلة والتسميع الشفهي"])
+            
+            if exam_mode == "📝 محاكي الامتحان الوزاري الشامل":
+                st.write("سيقوم النظام بتوليد نموذج امتحاني يحاكي تماماً أسئلة الدورات الوزارية لتدريبك.")
+                if st.button("🎯 توليد نموذج وزاري الآن"):
+                    with st.spinner("جاري صياغة الأسئلة الوزارية..."):
+                        e_prompt = f"أنت واضع أسئلة امتحانات وزارية في سوريا. قم بتوليد نموذج امتحاني وزاري شامل وجديد لمادة {sub} لصف {user['grade']}. اجعل الأسئلة تحاكي النمط الوزاري الحقيقي بدقة (أسئلة موضوعية، تعاليل، مسائل، الخ)، مع توزيع الدرجات."
+                        exam_paper = get_ai_response(e_prompt)
+                    st.markdown(f'<div class="exam-box">{exam_paper}</div>', unsafe_allow_html=True)
+                    
+            elif exam_mode == "🗣️ المقابلة والتسميع الشفهي":
+                st.write("أهلاً بك في غرفة التسميع. سيقوم المعلم بطرح سؤال واحد، اكتب أو انسخ إجابتك، وسيقوم بتصحيحها وتقييمك.")
                 
-                st.info(res)
-                try:
-                    match = re.search(r'\d+', res)
-                    if match:
-                        score = min(int(match.group()), 100)
-                        g_db = load_data(GRADES_DB)
-                        new_g = pd.DataFrame([{
-                            "user": user['user'], "sub": sub, "score": score, 
-                            "date": datetime.now().strftime("%Y-%m-%d %H:%M")
-                        }])
-                        pd.concat([g_db, new_g], ignore_index=True).to_csv(GRADES_DB, index=False)
-                        st.toast(f"تم تسجيل نتيجتك: {score}/100")
-                except:
-                    pass
+                for m in st.session_state["oral_exam_history"]:
+                    with st.chat_message(m["role"]): st.write(m["content"])
+                    
+                oral_q = st.chat_input("أدخل إجابتك الشفهية (كتابةً) هنا...")
+                if oral_q:
+                    st.session_state["oral_exam_history"].append({"role": "user", "content": oral_q})
+                    with st.chat_message("user"): st.write(oral_q)
+                    
+                    with st.spinner("الممتحن يقيّم إجابتك..."):
+                        o_prompt = f"أنت ممتحن شفهي صارم لمادة {sub} لصف {user['grade']}. الطالب قال الإجابة التالية: '{oral_q}'. قم بتصحيح إجابته علمياً (ولغوياً إذا لزم الأمر)، ثم اطرح عليه سؤالاً شفهياً جديداً ومختلفاً في نفس المادة لتختبر حفظه."
+                        o_ans = get_ai_response(o_prompt)
+                    
+                    st.session_state["oral_exam_history"].append({"role": "assistant", "content": o_ans})
+                    with st.chat_message("assistant"):
+                        st.write(o_ans)
+                        audio = speak_text(o_ans)
+                        if audio: st.audio(audio, format="audio/mp3")
 
-        # 3. المنقذ (الخطة)
+        # 5. المنقذ (الخطة)
         with t_plan:
-            st.subheader("📅 خطة الدراسة السريعة")
             col_a, col_b = st.columns(2)
-            d = col_a.number_input("كم يوماً متبقي للامتحان؟", min_value=1, max_value=100, value=7)
-            h = col_b.slider("كم ساعة تدرس يومياً؟", min_value=1, max_value=15, value=5)
-            
+            d = col_a.number_input("أيام للامتحان؟", min_value=1, value=7)
+            h = col_b.slider("ساعات الدراسة يومياً؟", 1, 15, 5)
             if st.button("توليد خطة الإنقاذ"):
-                with st.spinner("جاري تصميم خطة تناسب وقتك..."):
-                    plan_prompt = f"ضع لي جدولاً دراسياً في مادة {sub} لصف {user['grade']} للانتهاء في {d} أيام بـ {h} ساعات يومياً."
-                    plan = get_ai_response(plan_prompt)
-                st.markdown(f'<div class="plan-box">{plan}</div>', unsafe_allow_html=True)
+                with st.spinner("جاري التصميم..."):
+                    plan = get_ai_response(f"جدول دراسي في مادة {sub} لصف {user['grade']} للانتهاء في {d} أيام بـ {h} ساعات يومياً.")
+                st.markdown(f'<div class="exam-box">{plan}</div>', unsafe_allow_html=True)
 
-        # 4. مستوى الطالب
+        # 6. مستواي
         with t_progress:
-            st.subheader(f"📈 تطور مستواك في مادة {sub}")
             g_db = load_data(GRADES_DB)
-            
             my_scores = g_db[(g_db["user"] == user["user"]) & (g_db["sub"] == sub)]
             if not my_scores.empty:
-                chart_data = my_scores.set_index("date")["score"]
-                st.line_chart(chart_data)
-                avg_score = my_scores['score'].mean()
-                st.metric(label="متوسط درجاتك (من 100)", value=f"{avg_score:.1f}%")
-            else:
-                st.info("لا يوجد لك درجات مسجلة في هذه المادة بعد.")
+                st.line_chart(my_scores.set_index("date")["score"])
+                st.metric("متوسط درجاتك", f"{my_scores['score'].mean():.1f}%")
+            else: st.info("لا درجات مسجلة.")
