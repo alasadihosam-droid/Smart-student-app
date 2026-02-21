@@ -10,37 +10,54 @@ import io
 import hashlib
 import random
 import re
-import math
 import difflib
 import json
 import base64
+import numpy as np
+import threading
+
+# ==========================================
+# 0. نظام حماية التزامن لملفات الـ CSV (لمنع ضياع البيانات)
+# ==========================================
+db_lock = threading.Lock()
+
+def save_data(df, path):
+    with db_lock:
+        df.to_csv(path, index=False)
+
+def load_data(path):
+    with db_lock:
+        try: 
+            return pd.read_csv(path)
+        except Exception as e: 
+            print(f"Error loading {path}: {e}")
+            return pd.DataFrame()
+
+def init_db(path, columns):
+    if not os.path.exists(path): 
+        pd.DataFrame(columns=columns).to_csv(path, index=False)
 
 # ==========================================
 # 1. نظام التشفير الآمن لكلمات المرور (Salting)
 # ==========================================
 def hash_password_secure(password, salt=None):
     if salt is None:
-        salt = os.urandom(16) # توليد ملح عشوائي للحسابات الجديدة
+        salt = os.urandom(16)
     else:
         salt = base64.b64decode(salt)
     
-    # استخدام خوارزمية PBKDF2 المدمجة في بايثون (آمنة جداً)
     key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
     return base64.b64encode(salt).decode('utf-8') + ":" + base64.b64encode(key).decode('utf-8')
 
 def verify_password(stored_password, provided_password):
     if ':' in stored_password:
-        # حساب جديد (مشفر بالتقنية الجديدة)
         salt, _ = stored_password.split(':')
         return stored_password == hash_password_secure(provided_password, salt)
     else:
-        # حساب قديم (مشفر بالـ sha256 العادي) لتوافقية الحسابات السابقة
         return hashlib.sha256(provided_password.encode()).hexdigest() == stored_password
 
-OWNER_PASS_HASH = hash_password_secure("hosam031007")
-
 # ==========================================
-# 2. وظائف استخراج النص والـ RAG الاحترافي (سريع ودقيق)
+# 2. وظائف استخراج النص والـ RAG الاحترافي (مُسرّع بـ Numpy)
 # ==========================================
 def extract_and_chunk_pdf_smart(pdf_path, max_chunk_size=1500, overlap_size=200):
     chunks = []
@@ -50,12 +67,10 @@ def extract_and_chunk_pdf_smart(pdf_path, max_chunk_size=1500, overlap_size=200)
             reader = PyPDF2.PdfReader(f)
             text = "".join([page.extract_text() or "" for page in reader.pages])
             
-            # حل المشكلة 3: التنبيه في حال كان الملف فارغاً أو صوراً غير مقروءة
             if not text.strip():
-                st.warning(f"⚠️ تنبيه: لم نتمكن من استخراج نص من الملف '{os.path.basename(pdf_path)}'. قد يكون الملف عبارة عن صور (Scanned).")
+                st.warning(f"⚠️ تنبيه: لم نتمكن من استخراج نص من الملف '{os.path.basename(pdf_path)}'.")
                 return []
             
-            # حل المشكلة 4: تقسيم النص مع التداخل (Overlap) للحفاظ على السياق
             paragraphs = text.split('\n\n')
             current_chunk = ""
             
@@ -65,14 +80,12 @@ def extract_and_chunk_pdf_smart(pdf_path, max_chunk_size=1500, overlap_size=200)
                 else:
                     if current_chunk.strip():
                         chunks.append(current_chunk.strip())
-                    # أخذ جزء من نهاية المقطع السابق لضمان ترابط المعنى
                     overlap_text = current_chunk[-overlap_size:] if len(current_chunk) > overlap_size else current_chunk
                     current_chunk = overlap_text + "\n" + para + "\n\n"
                     
             if current_chunk.strip():
                 chunks.append(current_chunk.strip())
     except Exception as e:
-        # إظهار الخطأ بدل تجاهله
         st.error(f"⚠️ حدث خطأ أثناء قراءة الملف: {str(e)}")
     return chunks
 
@@ -81,8 +94,11 @@ def get_and_save_embeddings(pdf_path):
     embed_file = pdf_path.replace('.pdf', '_embeddings.json')
     
     if os.path.exists(embed_file):
-        with open(embed_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(embed_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error reading embeddings: {e}")
             
     chunks = extract_and_chunk_pdf_smart(pdf_path)
     embeddings_data = []
@@ -91,7 +107,8 @@ def get_and_save_embeddings(pdf_path):
         try:
             vec = genai.embed_content(model="models/embedding-001", content=chunk)['embedding']
             embeddings_data.append({"text": chunk, "vector": vec})
-        except:
+        except Exception as e:
+            print(f"Error embedding chunk: {e}")
             continue
             
     with open(embed_file, 'w', encoding='utf-8') as f:
@@ -99,29 +116,28 @@ def get_and_save_embeddings(pdf_path):
         
     return embeddings_data
 
-def get_best_context_smart(query, pdf_path):
+def get_best_context_smart(query, pdf_path, top_k=3):
     embeddings_data = get_and_save_embeddings(pdf_path)
     if not embeddings_data: return ""
     
     try:
         query_embed = genai.embed_content(model="models/embedding-001", content=query)['embedding']
-    except: return ""
+        query_vec = np.array(query_embed)
+    except Exception as e: 
+        print(f"Error embedding query: {e}")
+        return ""
     
-    best_chunk, max_score = "", -1
+    vectors = np.array([item["vector"] for item in embeddings_data])
+    texts = [item["text"] for item in embeddings_data]
     
-    for item in embeddings_data:
-        vec = item["vector"]
-        chunk = item["text"]
-        
-        dot = sum(a*b for a, b in zip(query_embed, vec))
-        norm1 = math.sqrt(sum(a*a for a in query_embed))
-        norm2 = math.sqrt(sum(b*b for b in vec))
-        score = dot / (norm1 * norm2) if norm1 * norm2 != 0 else 0
-        
-        if score > max_score:
-            max_score, best_chunk = score, chunk
-            
-    return best_chunk if max_score > 0.50 else ""
+    norms = np.linalg.norm(vectors, axis=1) * np.linalg.norm(query_vec)
+    norms[norms == 0] = 1e-10 
+    scores = np.dot(vectors, query_vec) / norms
+    
+    top_indices = np.argsort(scores)[-top_k:][::-1]
+    best_chunks = [texts[i] for i in top_indices if scores[i] > 0.40]
+    
+    return "\n\n---\n\n".join(best_chunks)
 
 # ==========================================
 # 3. إعدادات الأمان والذكاء الاصطناعي
@@ -138,7 +154,10 @@ except Exception as e:
 
 genai.configure(api_key=API_KEY)
 
-def get_ai_response(prompt, image=None, audio=None, strict_mode=False, context_text=""):
+OWNER_PASS_RAW = st.secrets.get("OWNER_PASSWORD", "hosam031007")
+OWNER_PASS_HASH = hash_password_secure(OWNER_PASS_RAW)
+
+def get_ai_response(prompt, image=None, audio=None, strict_mode=False, context_text="", file_uri=None):
     try:
         available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         safe_models = [m for m in available_models if "2.5" not in m]
@@ -151,34 +170,34 @@ def get_ai_response(prompt, image=None, audio=None, strict_mode=False, context_t
                 لا تقم بإضافة أي معلومات أو قوانين خارجية. إذا لم تكن الإجابة موجودة في النص، قل: 
                 'عذراً، إجابة هذا السؤال غير موجودة في نوطة الأستاذ المرفوعة.'
                 
-                النص المرجعي (الفقرة الأقرب للسؤال):
+                النص المرجعي:
                 {context_text}"""
             else:
-                system_instruction = "تعليمات صارمة: أنت معلم سوري. التزم حصراً بالمعلومات الموجودة في المنهاج السوري. لا تقم بإضافة أي معلومات خارجية. إذا كان السؤال خارج المنهاج قل 'هذا السؤال خارج المنهاج المقرر'."
+                system_instruction = "تعليمات صارمة: أنت معلم سوري. التزم حصراً بالمعلومات الموجودة في المنهاج السوري. لا تقم بإضافة أي معلومات خارجية."
             
             prompt = system_instruction + "\n\nسؤال/طلب الطالب:\n" + prompt
 
         for model_name in safe_models:
             try:
                 model = genai.GenerativeModel(model_name)
-                contents = [prompt]
+                contents = []
+                if file_uri: contents.append(file_uri)
+                contents.append(prompt)
                 if image: contents.append(image)
                 if audio: contents.append(audio)
                 return model.generate_content(contents).text
-            except Exception: continue 
-        return "⚠️ تم رفض الاتصال. جرب تشغيل VPN."
+            except Exception as e: 
+                print(f"Model {model_name} failed: {e}")
+                continue 
+        return "⚠️ تم رفض الاتصال أو لا يوجد موديل متاح. جرب تشغيل VPN."
     except Exception as e: return f"⚠️ خطأ عام: {str(e)}"
 
 def check_cheating_smart(text1, text2):
     prompt = f"""أنت خبير في كشف الغش الأكاديمي.
-    لدينا إجابتان من طالبين مختلفين لنفس السؤال العلمي أو الأدبي.
-    
+    لدينا إجابتان من طالبين مختلفين لنفس السؤال العلمي.
     الإجابة الأولى: "{text1}"
     الإجابة الثانية: "{text2}"
-    
-    مهمتك: هل هناك تلاعب واضح أو نسخ ولصق مع تغيير متعمد لبعض الكلمات للتمويه؟ أم أن التشابه طبيعي لأنها إجابة علمية نموذجية؟
-    
-    أريد إجابتك بالصيغة التالية حصراً:
+    مهمتك: هل هناك تلاعب واضح أو نسخ ولصق؟ أريد إجابتك بالصيغة التالية حصراً:
     النسبة: [النسبة المئوية لاحتمالية الغش رقماً]
     التحليل: [جملة واحدة سريعة تشرح السبب]"""
     return get_ai_response(prompt, strict_mode=False)
@@ -190,7 +209,9 @@ def speak_text(text):
         tts.write_to_fp(fp)
         fp.seek(0)
         return fp
-    except: return None
+    except Exception as e: 
+        print(f"TTS Error: {e}")
+        return None
 
 # ==========================================
 # 4. تهيئة قواعد البيانات والمجلدات
@@ -206,9 +227,6 @@ TEACHER_SUBJECTS_DB = "db/teacher_subjects.csv"
 CODES_DB = "db/codes.csv" 
 BROADCAST_DB = "db/broadcasts.csv" 
 
-def init_db(path, columns):
-    if not os.path.exists(path): pd.DataFrame(columns=columns).to_csv(path, index=False)
-
 init_db(USERS_DB, ["user", "pass", "role", "grade", "fb_link", "is_new", "is_premium", "invited_by"]) 
 init_db(FILES_DB, ["name", "grade", "sub", "type", "date", "uploader", "chapter_num"]) 
 init_db(GRADES_DB, ["user", "sub", "score", "date"])
@@ -217,10 +235,6 @@ init_db(TEACHER_SUBJECTS_DB, ["teacher_name", "grade", "subject"])
 init_db(CODES_DB, ["code", "is_used", "used_by", "date_created"])
 init_db(BROADCAST_DB, ["sender", "grade", "subject", "message", "date"])
 
-def load_data(path):
-    try: return pd.read_csv(path)
-    except: return pd.DataFrame()
-
 db_users_check = load_data(USERS_DB)
 if not db_users_check.empty:
     changed = False
@@ -228,14 +242,14 @@ if not db_users_check.empty:
     if "fb_link" not in db_users_check.columns: db_users_check["fb_link"] = ""; changed = True
     if "is_premium" not in db_users_check.columns: db_users_check["is_premium"] = False; changed = True
     if "invited_by" not in db_users_check.columns: db_users_check["invited_by"] = ""; changed = True
-    if changed: db_users_check.to_csv(USERS_DB, index=False)
+    if changed: save_data(db_users_check, USERS_DB)
 
 db_files_check = load_data(FILES_DB)
 if not db_files_check.empty:
     changed = False
     if "uploader" not in db_files_check.columns: db_files_check["uploader"] = "غير معروف"; changed = True
     if "chapter_num" not in db_files_check.columns: db_files_check["chapter_num"] = 1; changed = True
-    if changed: db_files_check.to_csv(FILES_DB, index=False)
+    if changed: save_data(db_files_check, FILES_DB)
 
 # ==========================================
 # 5. إعدادات الواجهة والترحيب الزمني 
@@ -247,81 +261,103 @@ if 5 <= hour < 12: time_greeting = "صباح الخير ☀️"
 elif 12 <= hour < 18: time_greeting = "طاب نهارك 🌤️"
 else: time_greeting = "مساء الخير 🌙"
 
-# تحديث الـ CSS بألوان عصرية، تدرجات متناسقة، وحركات تفاعلية جذابة
+# ==========================================
+# ستايل الـ CSS الاحترافي الجديد (متعوب عليه)
+# ==========================================
 st.markdown("""
     <style>
     #MainMenu, footer, header {visibility: hidden;}
     html, body, [class*="st-"] { scroll-behavior: smooth; overscroll-behavior-y: none; }
-    .stApp { overflow-x: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     
-    /* الصناديق الحديثة */
+    /* لون خلفية التطبيق كامل ليعطي تباين مع الأزرار */
+    .stApp { 
+        background-color: #f4f6f9; 
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+    }
+    
+    /* الصناديق والمربعات البيضاء الأنيقة */
     .modern-box { 
-        padding: 20px; 
-        background: linear-gradient(145deg, #ffffff, #f0f4f8); 
-        border-radius: 12px; 
-        border-right: 5px solid #00BCD4; 
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        margin-bottom: 20px; 
+        padding: 25px; 
+        background: #ffffff; 
+        border-radius: 20px; 
+        border-right: 6px solid #1E88E5; 
+        box-shadow: 0 10px 25px rgba(0,0,0,0.06); 
+        margin-bottom: 25px; 
+        transition: transform 0.3s ease;
     }
+    .modern-box:hover { transform: translateY(-3px); }
+    
+    /* صندوق الإشعارات */
     .broadcast-box { 
-        padding: 15px; 
-        background: linear-gradient(135deg, #fff9c4, #fff59d); 
-        border-right: 5px solid #ffb300; 
-        border-radius: 12px; 
-        margin-bottom: 15px; 
-        color: #3e2723;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        padding: 20px; 
+        background: linear-gradient(135deg, #FF9800, #FFB74D); 
+        border-radius: 16px; 
+        margin-bottom: 20px; 
+        color: #ffffff; 
+        font-weight: bold;
+        font-size: 16px;
+        box-shadow: 0 6px 15px rgba(255, 152, 0, 0.3);
     }
     
-    /* النصوص المميزة */
-    .welcome-title { font-size: 2rem; font-weight: 800; text-align: center; color: #1565C0; margin-bottom: 5px;}
-    .programmer-tag { font-size: 0.95rem; text-align: center; font-weight: 600; color: #546E7A; }
-    .teacher-badge { font-size: 0.85rem; background-color: #E1F5FE; color: #0277BD; padding: 4px 12px; border-radius: 15px; border: 1px solid #81D4FA; margin-left: 10px; float: left; font-weight: bold;}
+    /* العناوين المتدرجة */
+    .welcome-title { 
+        font-size: 2.2rem; 
+        font-weight: 900; 
+        text-align: center; 
+        background: linear-gradient(to left, #1E88E5, #8E24AA);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 5px;
+    }
+    .programmer-tag { font-size: 1rem; text-align: center; font-weight: 700; color: #78909C; letter-spacing: 1px; }
+    .teacher-badge { font-size: 0.85rem; background: linear-gradient(135deg, #1E88E5, #1565C0); color: white; padding: 6px 14px; border-radius: 20px; margin-left: 10px; float: left; font-weight: bold; box-shadow: 0 4px 10px rgba(30, 136, 229, 0.3);}
     
-    /* أزرار القائمة الرئيسية (تفاعلية ومتدرجة) */
+    /* تصميم الأيقونات (الأزرار المربعة) - التحديث السحري */
     div[data-testid="column"] button { 
         width: 100%; 
-        height: 120px; 
-        border-radius: 16px; 
-        background: linear-gradient(135deg, #1E88E5, #00ACC1); 
-        color: white; 
-        font-size: 18px; 
-        font-weight: 700; 
-        border: none; 
-        box-shadow: 0 6px 12px rgba(0, 172, 193, 0.2); 
-        transition: all 0.3s ease; 
+        height: 130px; 
+        border-radius: 24px; 
+        /* لون كحلي/أزرق غامق متباين جداً مع الخلفية الفاتحة */
+        background: linear-gradient(135deg, #2c3e50, #3498db); 
+        color: #ffffff; 
+        font-size: 19px; 
+        font-weight: 800; 
+        border: 2px solid rgba(255,255,255,0.1); 
+        box-shadow: 0 10px 25px rgba(52, 152, 219, 0.3), inset 0 2px 5px rgba(255,255,255,0.2); 
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); 
         display: flex; 
         flex-direction: column; 
         align-items: center; 
         justify-content: center; 
         letter-spacing: 0.5px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
     }
     div[data-testid="column"] button:hover { 
-        transform: translateY(-5px); 
-        box-shadow: 0 10px 20px rgba(0, 172, 193, 0.4); 
-        background: linear-gradient(135deg, #1565C0, #0097A7);
+        transform: translateY(-8px); 
+        box-shadow: 0 15px 35px rgba(52, 152, 219, 0.5), inset 0 2px 5px rgba(255,255,255,0.3); 
+        background: linear-gradient(135deg, #34495e, #2980b9);
     }
     div[data-testid="column"] button:active { 
-        transform: translateY(2px) scale(0.98); 
+        transform: translateY(2px) scale(0.96); 
+        box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4); 
     }
     
-    /* زر العودة (أحمر أنيق) */
+    /* زر العودة */
     .back-btn>button { 
-        background: linear-gradient(135deg, #EF5350, #C62828) !important; 
-        height: 55px !important; 
-        border-radius: 12px !important;
-        margin-bottom: 25px; 
+        background: linear-gradient(135deg, #FF416C, #FF4B2B) !important; 
+        height: 60px !important; 
+        border-radius: 16px !important; 
+        margin-bottom: 30px; 
         font-size: 18px !important; 
-        font-weight: bold !important;
-        border: none !important;
-        color: white !important;
-        box-shadow: 0 4px 10px rgba(198, 40, 40, 0.3) !important;
+        font-weight: 800 !important; 
+        border: none !important; 
+        color: white !important; 
+        box-shadow: 0 8px 20px rgba(255, 65, 108, 0.4) !important; 
         transition: all 0.3s ease !important;
     }
-    .back-btn>button:hover {
-        transform: translateY(-3px) !important;
-        box-shadow: 0 6px 15px rgba(198, 40, 40, 0.5) !important;
-        background: linear-gradient(135deg, #E53935, #B71C1C) !important;
+    .back-btn>button:hover { 
+        transform: translateY(-4px) !important; 
+        box-shadow: 0 12px 25px rgba(255, 65, 108, 0.6) !important; 
     }
     </style>
     """, unsafe_allow_html=True)
@@ -392,10 +428,9 @@ if st.session_state["user_data"] is None:
                 users = load_data(USERS_DB)
                 if not users.empty and nu in users['user'].values: st.error("⚠️ الاسم موجود مسبقاً.")
                 else:
-                    # استخدام التشفير الآمن الجديد
                     secure_pass = hash_password_secure(np)
                     new_user = pd.DataFrame([{"user": nu, "pass": secure_pass, "role": "طالب", "grade": ng, "fb_link": fb, "is_new": False, "is_premium": False, "invited_by": invite}])
-                    pd.concat([users, new_user], ignore_index=True).to_csv(USERS_DB, index=False)
+                    save_data(pd.concat([users, new_user], ignore_index=True), USERS_DB)
                     st.success("🎉 تم إنشاء الحساب! سجل دخولك الآن.")
 
 # ==========================================
@@ -417,10 +452,10 @@ else:
         if st.button("حفظ الإعدادات والبدء 🚀"):
             if pic: Image.open(pic).save(f"profiles/{user['user']}.png")
             ts_db = load_data(TEACHER_SUBJECTS_DB)
-            pd.concat([ts_db, pd.DataFrame([{"teacher_name": user["user"], "grade": sel_grade, "subject": sel_sub}])], ignore_index=True).to_csv(TEACHER_SUBJECTS_DB, index=False)
+            save_data(pd.concat([ts_db, pd.DataFrame([{"teacher_name": user["user"], "grade": sel_grade, "subject": sel_sub}])], ignore_index=True), TEACHER_SUBJECTS_DB)
             users_df = load_data(USERS_DB)
             users_df.loc[users_df['user'] == user['user'], 'is_new'] = False
-            users_df.to_csv(USERS_DB, index=False)
+            save_data(users_df, USERS_DB)
             st.session_state["user_data"]["is_new"] = False
             st.success("تم إعداد حسابك بنجاح!")
             st.rerun()
@@ -462,10 +497,10 @@ else:
                             match_code = codes_df[(codes_df['code'] == int(code_input)) & (codes_df['is_used'] == False)]
                             if not match_code.empty:
                                 codes_df.loc[codes_df['code'] == int(code_input), ['is_used', 'used_by']] = [True, user['user']]
-                                codes_df.to_csv(CODES_DB, index=False)
+                                save_data(codes_df, CODES_DB)
                                 users_df = load_data(USERS_DB)
                                 users_df.loc[users_df['user'] == user['user'], 'is_premium'] = True
-                                users_df.to_csv(USERS_DB, index=False)
+                                save_data(users_df, USERS_DB)
                                 st.session_state["user_data"]["is_premium"] = True
                                 st.success("تم تفعيل حسابك بنجاح! 🎉")
                                 st.rerun()
@@ -498,7 +533,7 @@ else:
                 if t_name in users['user'].values: st.error("الاسم موجود.")
                 else:
                     secure_t_pass = hash_password_secure(t_pass)
-                    pd.concat([users, pd.DataFrame([{"user": t_name, "pass": secure_t_pass, "role": "أستاذ", "grade": "الكل", "fb_link": "معلم", "is_new": True, "is_premium": True, "invited_by": ""}])], ignore_index=True).to_csv(USERS_DB, index=False)
+                    save_data(pd.concat([users, pd.DataFrame([{"user": t_name, "pass": secure_t_pass, "role": "أستاذ", "grade": "الكل", "fb_link": "معلم", "is_new": True, "is_premium": True, "invited_by": ""}])], ignore_index=True), USERS_DB)
                     st.success("تم التفعيل!")
                     st.rerun()
 
@@ -511,7 +546,7 @@ else:
                 if os.path.exists(t_path): os.remove(t_path)
                 embed_path = t_path.replace('.pdf', '_embeddings.json')
                 if os.path.exists(embed_path): os.remove(embed_path)
-                f_df[f_df['name'] != file_to_del].to_csv(FILES_DB, index=False)
+                save_data(f_df[f_df['name'] != file_to_del], FILES_DB)
                 st.success("تم الحذف!")
                 st.rerun()
 
@@ -526,14 +561,14 @@ else:
                     if new_c not in existing_codes:
                         new_codes.append({"code": new_c, "is_used": False, "used_by": "", "date_created": datetime.now().strftime("%Y-%m-%d")})
                         existing_codes.add(new_c)
-                pd.concat([c_df, pd.DataFrame(new_codes)], ignore_index=True).to_csv(CODES_DB, index=False)
+                save_data(pd.concat([c_df, pd.DataFrame(new_codes)], ignore_index=True), CODES_DB)
                 st.success(f"تم توليد {num_codes} كود فريد وجديد بنجاح!")
 
         with t_notify:
             n_df = load_data(NOTIFY_DB)
             st.dataframe(n_df, use_container_width=True)
             if not n_df.empty and st.button("مسح جميع التنويهات"): 
-                pd.DataFrame(columns=["sender", "message", "date"]).to_csv(NOTIFY_DB, index=False)
+                save_data(pd.DataFrame(columns=["sender", "message", "date"]), NOTIFY_DB)
                 st.rerun()
                 
         with t_anti_cheat:
@@ -609,7 +644,7 @@ else:
             st.subheader("📢 إرسال إشعار للطلاب")
             b_msg = st.text_area("اكتب الإشعار هنا لطلابك:")
             if st.button("🚀 إرسال فوراً") and b_msg:
-                pd.concat([load_data(BROADCAST_DB), pd.DataFrame([{"sender": user["user"], "grade": view_grade, "subject": sub, "message": b_msg, "date": datetime.now().strftime("%Y-%m-%d %H:%M")}])], ignore_index=True).to_csv(BROADCAST_DB, index=False)
+                save_data(pd.concat([load_data(BROADCAST_DB), pd.DataFrame([{"sender": user["user"], "grade": view_grade, "subject": sub, "message": b_msg, "date": datetime.now().strftime("%Y-%m-%d %H:%M")}])], ignore_index=True), BROADCAST_DB)
                 st.success("تم نشر الإشعار بنجاح!")
 
         elif st.session_state["current_view"] == "upload" and user["role"] == "أستاذ":
@@ -635,9 +670,8 @@ else:
                             
                             with open(file_save_path, "wb") as f: f.write(uploaded_file.getbuffer())
                             
-                            pd.concat([load_data(FILES_DB), pd.DataFrame([{"name": f_name, "grade": view_grade, "sub": sub, "type": internal_type, "date": datetime.now().strftime("%Y-%m-%d"), "uploader": user["user"], "chapter_num": ch_num}])], ignore_index=True).to_csv(FILES_DB, index=False)
+                            save_data(pd.concat([load_data(FILES_DB), pd.DataFrame([{"name": f_name, "grade": view_grade, "sub": sub, "type": internal_type, "date": datetime.now().strftime("%Y-%m-%d"), "uploader": user["user"], "chapter_num": ch_num}])], ignore_index=True), FILES_DB)
                             
-                            # معالجة الملف فوراً في الخلفية لتسريع المعلم الذكي للطلاب
                             if internal_type in ["بحث", "دورات"]:
                                 with st.spinner("جاري قراءة الملف وتجهيز الذكاء الاصطناعي للإجابة منه لاحقاً... 🤖"):
                                     get_and_save_embeddings(file_save_path)
@@ -688,7 +722,8 @@ else:
                     if "بالمشرمحي" in style: pr += " اشرحها عامية سورية بأمثلة واقعية"
                     
                     if file_path and os.path.exists(file_path):
-                        best_context = get_best_context_smart(q, file_path)
+                        # نرسل الان أفضل 3 مقاطع بفضل التحديث
+                        best_context = get_best_context_smart(q, file_path, top_k=3)
                         
                     ans = get_ai_response(pr, strict_mode=strict, context_text=best_context)
                 st.session_state["chat_history"].append({"role": "assistant", "content": ans})
@@ -731,11 +766,10 @@ else:
 
         elif st.session_state["current_view"] == "past_papers":
             st.subheader("📖 مستكشف أسئلة الدورات السابقة")
-            st.info("الذكاء الاصطناعي سيستخرج لك الأسئلة التي وردت في الدورات السابقة للبحث الذي تختاره حصراً.")
+            st.info("الذكاء الاصطناعي سيستخرج لك الأسئلة التي وردت في الدورات السابقة للبحث الذي تختاره حصراً بدقة عالية جداً بفضل الـ File API.")
             
             f_db = load_data(FILES_DB)
             my_f = f_db[(f_db["grade"] == view_grade) & (f_db["sub"] == sub)] if not f_db.empty else pd.DataFrame()
-            
             past_papers_files = my_f[my_f["type"] == "دورات"] if not my_f.empty else pd.DataFrame()
             
             if past_papers_files.empty:
@@ -749,19 +783,22 @@ else:
                         file_path = os.path.join("lessons", selected_paper)
                         if os.path.exists(file_path):
                             with st.spinner("يقرأ ملف الدورات ويستخرج الأسئلة المطلوبة..."):
-                                paper_chunks = extract_and_chunk_pdf_smart(file_path, max_chunk_size=4000)
-                                paper_text = " ".join(paper_chunks)
-                                
-                                prompt = f"""أنت خبير في المنهاج السوري. اقرأ ملف أسئلة الدورات السورية المرفق هذا، واستخرج **فقط** الأسئلة التي تخص موضوع أو بحث '{topic_query}'.
-                                - اذكر صيغة السؤال كما ورد في الدورة تماماً.
-                                - اذكر السنة أو الدورة إذا كانت مكتوبة بجانب السؤال.
-                                - لا تقم بالإجابة على الأسئلة، فقط استخرجها ورتبها في قائمة.
-                                
-                                نص الدورات المرفوع:
-                                {paper_text}"""
-                                
-                                res = get_ai_response(prompt, strict_mode=False)
-                                st.markdown(f'<div class="modern-box">{res}</div>', unsafe_allow_html=True)
+                                try:
+                                    # رفع الملف مؤقتاً لخوادم جوجل لمعالجته كقطعة واحدة
+                                    uploaded_gemini_file = genai.upload_file(file_path)
+                                    
+                                    prompt = f"""أنت خبير في المنهاج السوري. اقرأ ملف أسئلة الدورات السورية المرفق هذا، واستخرج **فقط** الأسئلة التي تخص موضوع أو بحث '{topic_query}'.
+                                    - اذكر صيغة السؤال كما ورد في الدورة تماماً.
+                                    - اذكر السنة أو الدورة إذا كانت مكتوبة بجانب السؤال.
+                                    - لا تقم بالإجابة على الأسئلة، فقط استخرجها ورتبها في قائمة."""
+                                    
+                                    res = get_ai_response(prompt, strict_mode=False, file_uri=uploaded_gemini_file)
+                                    st.markdown(f'<div class="modern-box">{res}</div>', unsafe_allow_html=True)
+                                    
+                                    # حذف الملف من خوادم جوجل بعد الانتهاء للحفاظ على المساحة والخصوصية
+                                    genai.delete_file(uploaded_gemini_file.name)
+                                except Exception as e:
+                                    st.error(f"حدث خطأ أثناء معالجة الملف: {str(e)}")
                         else:
                             st.error("عذراً، ملف الدورات غير موجود في المجلد.")
                     else:
